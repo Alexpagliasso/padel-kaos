@@ -1,0 +1,1 @@
+export { useDemoTournamentRepository } from './demoRepositories'
