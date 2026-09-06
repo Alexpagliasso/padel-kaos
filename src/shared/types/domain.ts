@@ -51,6 +51,9 @@ export type PlayerGender = 'woman' | 'man' | 'non_binary' | 'unspecified'
 
 export type Player = {
   id: string
+  teamId: string
+  firstName: string
+  lastName: string
   name: string
   nickname: string
   gender: PlayerGender
@@ -76,6 +79,7 @@ export type Team = {
 export type MatchLineup = {
   teamId: string
   setNumber: number
+  phase?: 'set_1' | 'set_2' | 'super_tiebreak'
   activePlayerIds: [string, string]
   benchPlayerId: string
 }

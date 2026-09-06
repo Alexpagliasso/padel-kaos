@@ -18,6 +18,7 @@ import type {
   Tournament,
   TournamentPhase,
 } from '../../../shared/types/domain'
+import { splitLegacyPlayerName } from '../../../shared/lib/playerNames'
 
 export type SupabaseTournamentRow = {
   id: string
@@ -47,6 +48,8 @@ export type SupabaseTeamRow = {
 export type SupabasePlayerRow = {
   id: string
   team_id: string
+  first_name?: string | null
+  last_name?: string | null
   full_name: string
   nickname: string
   gender: string
@@ -84,6 +87,7 @@ export type SupabaseMatchLineupRow = {
   match_id: string
   team_id: string
   set_number: number
+  phase?: string | null
   active_player_1_id: string
   active_player_2_id: string
   bench_player_id: string | null
@@ -238,10 +242,18 @@ export function mapSupabaseTournamentState(dto: SupabaseTournamentStateDto): Tou
 }
 
 function mapPlayer(player: SupabasePlayerRow): Player {
+  const legacyName = splitLegacyPlayerName(player.full_name)
+  const firstName = player.first_name?.trim() || legacyName.firstName
+  const lastName = player.last_name?.trim() || legacyName.lastName
+  const name = `${firstName} ${lastName}`.trim() || player.full_name
+
   return {
     id: player.id,
-    name: player.full_name,
-    nickname: player.nickname,
+    teamId: player.team_id,
+    firstName,
+    lastName,
+    name,
+    nickname: player.nickname || firstName || player.full_name,
     gender: mapGender(player.gender),
     accessToken: '',
   }
@@ -251,9 +263,18 @@ function mapLineup(lineup: SupabaseMatchLineupRow): MatchLineup {
   return {
     teamId: lineup.team_id,
     setNumber: lineup.set_number,
+    phase: mapLineupPhase(lineup.phase, lineup.set_number),
     activePlayerIds: [lineup.active_player_1_id, lineup.active_player_2_id],
     benchPlayerId: lineup.bench_player_id ?? '',
   }
+}
+
+function mapLineupPhase(phase: string | null | undefined, setNumber: number): MatchLineup['phase'] {
+  if (phase === 'set_1' || phase === 'set_2' || phase === 'super_tiebreak') return phase
+  if (setNumber === 1) return 'set_1'
+  if (setNumber === 2) return 'set_2'
+  if (setNumber === 3) return 'super_tiebreak'
+  return undefined
 }
 
 function mapRound(round: SupabaseRoundRow): Round {

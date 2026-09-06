@@ -100,8 +100,36 @@ export function useSupabaseEventRepository(): EventRepositoryContract {
 }
 
 export function useSupabaseTeamRepository(): TeamRepositoryContract {
+  const queryClient = useQueryClient()
+  const rpc = useMutation<string, Error, { name: string; args: Record<string, unknown> }>({
+    mutationFn: async ({ name, args }: { name: string; args: Record<string, unknown> }) => {
+      const client = requireSupabase()
+      const { data, error } = await client.rpc(name, args)
+      if (error) throw error
+      return data as string
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['supabase'] }),
+  })
+
   return {
-    createTeam: () => undefined,
+    createTeam: (input) => rpc.mutateAsync({
+      name: 'create_team_with_roster',
+      args: {
+        p_tournament_id: input.tournamentId,
+        p_name: input.name,
+        p_color: input.color,
+        p_players: input.players,
+      },
+    }),
+    updateTeam: (teamId, input) => rpc.mutateAsync({
+      name: 'update_team_with_roster',
+      args: {
+        p_team_id: teamId,
+        p_name: input.name,
+        p_color: input.color,
+        p_players: input.players,
+      },
+    }),
   }
 }
 
@@ -131,7 +159,7 @@ async function loadActiveTournament() {
     selectTournamentRows<SupabaseCourtRow>(client, 'courts', 'id,name,sort_order', tournament.id, 'sort_order'),
     selectTournamentRows<SupabaseRoundRow>(client, 'rounds', 'id,tournament_id,name,stage,sequence,status,dice_result,dice_rule_id,dice_started_at,dice_ends_at', tournament.id, 'sequence'),
     selectTournamentRows<SupabaseTeamRow>(client, 'teams', 'id,name,short_name,color,group_id', tournament.id, 'short_name'),
-    selectTournamentRows<SupabasePlayerRow>(client, 'players', 'id,team_id,full_name,nickname,gender', tournament.id, 'nickname'),
+    selectPlayersRows(client, tournament.id),
     selectTournamentRows<SupabaseMatchRow>(client, 'matches', 'id,round_id,group_id,court_id,team_a_id,team_b_id,status,current_set,games_a,games_b,sets_a,sets_b', tournament.id, 'created_at'),
     selectMatchScopedRows<SupabaseMatchLineupRow>(client, 'match_lineups', 'match_id,team_id,set_number,active_player_1_id,active_player_2_id,bench_player_id', tournament.id),
     selectCardDefinitions(client, tournament.id),
@@ -203,4 +231,32 @@ async function selectCardDefinitions(client: ReturnType<typeof requireSupabase>,
     .order('slug', { ascending: true })
   if (error) throw new Error(`Unable to load card_definitions: ${error.message}`)
   return (data ?? []) as SupabaseCardDefinitionRow[]
+}
+
+async function selectPlayersRows(client: ReturnType<typeof requireSupabase>, tournamentId: string) {
+  const withRosterNames = await client
+    .from('players')
+    .select('id,team_id,first_name,last_name,full_name,nickname,gender')
+    .eq('tournament_id', tournamentId)
+    .order('nickname', { ascending: true })
+
+  if (!withRosterNames.error) return (withRosterNames.data ?? []) as SupabasePlayerRow[]
+  if (!isMissingRosterNameColumnError(withRosterNames.error)) {
+    throw new Error(`Unable to load players: ${withRosterNames.error.message}`)
+  }
+
+  const { data, error } = await client
+    .from('players')
+    .select('id,team_id,full_name,nickname,gender')
+    .eq('tournament_id', tournamentId)
+    .order('nickname', { ascending: true })
+
+  if (error) throw new Error(`Unable to load players: ${error.message}`)
+  return (data ?? []) as SupabasePlayerRow[]
+}
+
+function isMissingRosterNameColumnError(error: { code?: string; message?: string }) {
+  return error.code === '42703'
+    || error.code === 'PGRST204'
+    || Boolean(error.message?.includes('first_name') || error.message?.includes('last_name'))
 }

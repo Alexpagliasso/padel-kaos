@@ -203,7 +203,7 @@ describe('demo store commands', () => {
     store.rollKaosDice('match-demo-1')
     store.startSecondSet('match-demo-1')
 
-    expect(useDemoStore.getState().tournament.matches[0].score.points).toEqual({ A: '0', B: '0' })
+    expect(useDemoStore.getState().tournament.matches[0].score.points).toEqual({ A: '0', B: '15' })
   })
 
   it('end match blocks points, cards and dice', () => {

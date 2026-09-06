@@ -1,0 +1,83 @@
+import type { AppProfile } from '../features/auth/authIdentity'
+import { getTeam } from '../features/tournament/selectors'
+import { getPlayerDisplayName } from '../shared/lib/playerNames'
+import type { Match, Team, TeamCard, Tournament } from '../shared/types/domain'
+
+export type PlayerRouteState =
+  | { type: 'loading' }
+  | { type: 'error'; title: string; message: string }
+  | {
+      type: 'ready'
+      playerTeam: Team
+      match: Match
+      teamA?: Team
+      teamB?: Team
+      cards: TeamCard[]
+      greetingName: string
+      showDemoTeamSelector: boolean
+    }
+
+export function resolvePlayerRouteState(input: {
+  provider: 'demo' | 'supabase'
+  tournament: Tournament
+  isLoading?: boolean
+  repositoryError?: string
+  profile?: AppProfile | null
+  demoSelectedTeamId: string
+}): PlayerRouteState {
+  if (input.isLoading) return { type: 'loading' }
+  if (input.repositoryError) {
+    return { type: 'error', title: 'Tournament unavailable', message: input.repositoryError }
+  }
+
+  const teamId = resolvePlayerTeamId(input.provider, input.profile, input.demoSelectedTeamId)
+  if (!teamId) {
+    return {
+      type: 'error',
+      title: 'Team profile missing',
+      message: 'This account is not associated with a team.',
+    }
+  }
+
+  const playerTeam = getTeam(input.tournament, teamId)
+  if (!playerTeam) {
+    return {
+      type: 'error',
+      title: 'Team not found',
+      message: 'The team associated with this account is not configured in the tournament.',
+    }
+  }
+
+  if (playerTeam.players.length === 0) {
+    return {
+      type: 'error',
+      title: 'No players configured',
+      message: `${playerTeam.name} does not have players configured yet.`,
+    }
+  }
+
+  const match = input.tournament.matches.find((item) => item.teamAId === playerTeam.id || item.teamBId === playerTeam.id)
+  if (!match) {
+    return {
+      type: 'error',
+      title: 'No match configured',
+      message: `${playerTeam.name} is not assigned to an active tournament match yet.`,
+    }
+  }
+
+  return {
+    type: 'ready',
+    playerTeam,
+    match,
+    teamA: getTeam(input.tournament, match.teamAId),
+    teamB: getTeam(input.tournament, match.teamBId),
+    cards: input.tournament.teamCards.filter((teamCard) => teamCard.teamId === playerTeam.id),
+    greetingName: playerTeam.players[0] ? getPlayerDisplayName(playerTeam.players[0]) : playerTeam.shortName,
+    showDemoTeamSelector: input.provider === 'demo',
+  }
+}
+
+function resolvePlayerTeamId(provider: 'demo' | 'supabase', profile: AppProfile | null | undefined, demoSelectedTeamId: string) {
+  if (provider === 'demo') return demoSelectedTeamId
+  return profile?.role === 'team' ? profile.teamId ?? '' : ''
+}

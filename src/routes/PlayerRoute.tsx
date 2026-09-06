@@ -8,24 +8,84 @@ import { GlobalEventOverlay } from '../shared/components/GlobalEventOverlay'
 import { EventPresentationOverlay } from '../shared/components/EventPresentationOverlay'
 import { MatchTile } from '../features/live/MatchTile'
 import { useTournament } from '../features/tournament/useTournament'
-import { getDiceRuleForMatch, getTeam } from '../features/tournament/selectors'
+import { getDiceRuleForMatch } from '../features/tournament/selectors'
+import { getAvailablePairs, getRemainingPair, type PlayerPair } from '../domain/rules/rulesEngine'
 import { useDemoStore } from '../demo/demoStore'
 import { useEventRepository } from '../repositories/eventRepository'
+import { dataProvider } from '../repositories'
+import { useAuth } from '../features/auth/authContext'
+import { resolvePlayerRouteState, type PlayerRouteState } from './playerRouteState'
+import type { DemoEvent } from '../demo/demoTypes'
+import type { Tournament } from '../shared/types/domain'
+import { getPlayerDisplayName } from '../shared/lib/playerNames'
 
 export function PlayerRoute() {
-  const { data: tournament } = useTournament()
+  const { data: tournament, isLoading, error } = useTournament()
   const events = useEventRepository().events
+  const { profile } = useAuth()
   const selectedTeamId = useDemoStore((state) => state.selectedTeamId)
   const selectTeam = useDemoStore((state) => state.selectTeam)
   const playCard = useDemoStore((state) => state.playCard)
-  const [feedback, setFeedback] = useState('')
 
-  const playerTeam = getTeam(tournament, selectedTeamId) ?? tournament.teams[0]
-  const player = playerTeam.players[0]
-  const match = tournament.matches.find((item) => item.teamAId === playerTeam.id || item.teamBId === playerTeam.id) ?? tournament.matches[0]
-  const teamA = getTeam(tournament, match.teamAId)
-  const teamB = getTeam(tournament, match.teamBId)
-  const cards = tournament.teamCards.filter((teamCard) => teamCard.teamId === playerTeam.id)
+  const routeState = resolvePlayerRouteState({
+    provider: dataProvider,
+    tournament,
+    isLoading,
+    repositoryError: error,
+    profile,
+    demoSelectedTeamId: selectedTeamId,
+  })
+
+  if (routeState.type === 'loading') {
+    return (
+      <RoleShell>
+        <main className="mx-auto grid min-h-[70svh] max-w-5xl place-items-center px-4 text-center">
+          <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FFD000]">Loading player area</p>
+        </main>
+      </RoleShell>
+    )
+  }
+
+  if (routeState.type === 'error') {
+    return (
+      <RoleShell>
+        <main className="mx-auto grid min-h-[70svh] max-w-5xl place-items-center px-4 text-center">
+          <section className="max-w-xl rounded border border-white/10 bg-[#171717] p-6">
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FFD000]">Player area unavailable</p>
+            <h1 className="mt-3 text-3xl font-black">{routeState.title}</h1>
+            <p className="mt-3 text-white/60">{routeState.message}</p>
+          </section>
+        </main>
+      </RoleShell>
+    )
+  }
+
+  return (
+    <PlayerRouteContent
+      tournament={tournament}
+      events={events}
+      routeState={routeState}
+      onSelectDemoTeam={selectTeam}
+      onPlayDemoCard={(teamCardId) => playCard(teamCardId).message}
+    />
+  )
+}
+
+export function PlayerRouteContent({
+  tournament,
+  events,
+  routeState,
+  onSelectDemoTeam,
+  onPlayDemoCard,
+}: {
+  tournament: Tournament
+  events: DemoEvent[]
+  routeState: Extract<PlayerRouteState, { type: 'ready' }>
+  onSelectDemoTeam: (teamId: string) => void
+  onPlayDemoCard: (teamCardId: string) => string
+}) {
+  const [feedback, setFeedback] = useState('')
+  const { playerTeam, match, teamA, teamB, cards, greetingName, showDemoTeamSelector } = routeState
   const diceRule = getDiceRuleForMatch(tournament, match)
   const globalEvent = tournament.globalEvents.find((event) => event.status === 'active' || event.status === 'completed')
   const isKaosPending = match.status === 'kaos_pending' || match.status === 'kaos_reveal'
@@ -35,16 +95,20 @@ export function PlayerRoute() {
       <main className="mx-auto max-w-5xl px-4 pb-24 pt-5">
         <div className="mb-5 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FFD000]">PLAYER DEMO</p>
-            <h1 className="text-3xl font-black">Ciao {player.nickname}</h1>
-            <p className="text-white/55">{playerTeam.name} · view as simulator</p>
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FFD000]">
+              {showDemoTeamSelector ? 'PLAYER DEMO' : 'PLAYER AREA'}
+            </p>
+            <h1 className="text-3xl font-black">Ciao {greetingName}</h1>
+            <p className="text-white/55">{playerTeam.name}{showDemoTeamSelector ? ' · view as simulator' : ''}</p>
           </div>
-          <label className="grid gap-1 text-sm font-bold text-white/55">
-            View as
-            <select className="rounded border border-white/10 bg-black px-3 py-3 text-white" value={playerTeam.id} onChange={(event) => selectTeam(event.target.value)}>
-              {tournament.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
-            </select>
-          </label>
+          {showDemoTeamSelector ? (
+            <label className="grid gap-1 text-sm font-bold text-white/55">
+              View as
+              <select className="rounded border border-white/10 bg-black px-3 py-3 text-white" value={playerTeam.id} onChange={(event) => onSelectDemoTeam(event.target.value)}>
+                {tournament.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+              </select>
+            </label>
+          ) : null}
         </div>
         <EventPresentationOverlay events={events} />
         {isKaosPending ? (
@@ -57,6 +121,7 @@ export function PlayerRoute() {
           <section className="space-y-5">
             <Scoreboard match={match} teamA={teamA} teamB={teamB} />
             <LineupStrip match={match} teamA={teamA} teamB={teamB} />
+            <PlayerLineupSummary team={playerTeam} match={match} />
             {diceRule ? (
               <div className="rounded border border-[#FFD000]/30 bg-[#FFD000]/10 p-4">
                 <p className="text-sm font-black uppercase text-[#FFD000]">Kaos Rule</p>
@@ -76,10 +141,10 @@ export function PlayerRoute() {
                   <AnimatedCardReveal card={card} teamCard={teamCard} />
                   <button
                     className="w-full rounded bg-[#FFD000] px-4 py-3 font-black text-black disabled:cursor-not-allowed disabled:opacity-45"
-                    disabled={teamCard.state !== 'available'}
+                    disabled={!showDemoTeamSelector || teamCard.state !== 'available'}
                     onClick={() => {
-                      const result = playCard(teamCard.id)
-                      setFeedback(result.message)
+                      if (!showDemoTeamSelector) return
+                      setFeedback(onPlayDemoCard(teamCard.id))
                     }}
                   >
                     Play Card
@@ -110,4 +175,79 @@ export function PlayerRoute() {
       </nav>
     </RoleShell>
   )
+}
+
+function PlayerLineupSummary({ team, match }: { team: Tournament['teams'][number]; match: Tournament['matches'][number] }) {
+  const currentSet = match.score.currentSet === 3 ? 3 : match.score.currentSet === 2 ? 2 : 1
+  const previousLineups = match.lineups.filter((lineup) => lineup.teamId === team.id && lineup.setNumber < currentSet)
+  const currentLineup = match.lineups.find((lineup) => lineup.teamId === team.id && lineup.setNumber === currentSet)
+  const availablePairs = getAvailablePairs(team.players, previousLineups)
+  const remainingPair = currentSet === 3 ? getRemainingPair(team.players, previousLineups) : undefined
+
+  return (
+    <section className="rounded border border-white/10 bg-white/[0.04] p-4">
+      <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FFD000]">{getLineupPhaseLabel(currentSet)}</p>
+      {currentSet === 1 ? (
+        <div className="mt-3 space-y-3">
+          <h2 className="text-xl font-black">Choose lineup</h2>
+          <PairList title="Available" pairs={availablePairs} team={team} />
+          {currentLineup ? <PairList title="Current" pairs={[currentLineup.activePlayerIds]} team={team} /> : null}
+        </div>
+      ) : null}
+      {currentSet === 2 ? (
+        <div className="mt-3 space-y-3">
+          <PairList title="Used" pairs={previousLineups.map((lineup) => lineup.activePlayerIds)} team={team} />
+          <PairList title="Available" pairs={availablePairs} team={team} />
+          {currentLineup ? <PairList title="Current" pairs={[currentLineup.activePlayerIds]} team={team} /> : null}
+        </div>
+      ) : null}
+      {currentSet === 3 ? (
+        <div className="mt-3 space-y-3">
+          <PairList title="Previous pairs" pairs={previousLineups.map((lineup) => lineup.activePlayerIds)} team={team} />
+          {remainingPair ? (
+            <>
+              <PairList title="Required lineup" pairs={[remainingPair]} team={team} />
+              <button type="button" disabled className="rounded bg-[#FFD000] px-4 py-3 font-black text-black opacity-50">
+                Confirm required lineup
+              </button>
+            </>
+          ) : (
+            <p className="rounded border border-red-400/40 bg-red-950/20 p-3 text-sm font-bold text-red-100">
+              No unique remaining pair is available.
+            </p>
+          )}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function PairList({ title, pairs, team }: { title: string; pairs: PlayerPair[]; team: Tournament['teams'][number] }) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-black uppercase text-white/45">{title}</p>
+      <div className="flex flex-wrap gap-2">
+        {pairs.length > 0 ? pairs.map((pair) => (
+          <span key={`${title}-${pair[0]}-${pair[1]}`} className="rounded bg-white/10 px-3 py-2 text-sm font-bold">
+            {formatPair(pair, team)}
+          </span>
+        )) : (
+          <span className="rounded border border-dashed border-white/20 px-3 py-2 text-sm text-white/50">None</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function formatPair(pair: PlayerPair, team: Tournament['teams'][number]) {
+  return pair.map((playerId) => {
+    const player = team.players.find((item) => item.id === playerId)
+    return player ? getPlayerDisplayName(player) : 'TBD'
+  }).join(' + ')
+}
+
+function getLineupPhaseLabel(setNumber: 1 | 2 | 3) {
+  if (setNumber === 1) return 'SET 1'
+  if (setNumber === 2) return 'SET 2'
+  return 'SUPER TIEBREAK'
 }

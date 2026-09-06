@@ -5,6 +5,7 @@ import { requireSupabase, supabase } from '../../services/supabase/client'
 import { authProfileSchema, mapProfile, usernameToTechnicalEmail, type AppProfile } from './authIdentity'
 import { AuthContext, type AuthContextValue, type AuthStatus } from './authContext'
 import { signInWithUsernamePassword } from './authSignIn'
+import { signOutSupabaseSession } from './authLogout'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>(
@@ -88,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       logout: async () => {
         if (dataProvider === 'demo') return
-        await requireSupabase().auth.signOut()
+        await signOutSupabaseSession(requireSupabase())
         setSession(null)
         setProfile(null)
         setStatus('unauthenticated')

@@ -202,6 +202,9 @@ function createTeam(
     groupId: 'demo-group-a',
     players: playerSeeds.map(([playerName, gender], index) => ({
       id: `${id}-p${index + 1}`,
+      teamId: id,
+      firstName: playerName.split(' ')[0] ?? playerName,
+      lastName: playerName.split(' ').slice(1).join(' '),
       name: playerName,
       nickname: playerName.split(' ')[0],
       gender,

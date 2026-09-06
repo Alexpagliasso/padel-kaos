@@ -1,4 +1,5 @@
 import { AccessManagementPanel } from '../../auth/AccessManagementPanel'
+import { RlsDebugPanel } from '../../auth/RlsDebugPanel'
 import { useTournament } from '../../tournament/useTournament'
 import { AdminPageState } from '../dashboard/AdminDashboard'
 
@@ -15,6 +16,7 @@ export function AdminAccess() {
         <h1 className="mt-2 text-3xl font-black">{tournament.name}</h1>
       </header>
       <AccessManagementPanel tournament={tournament} />
+      <RlsDebugPanel tournament={tournament} />
     </main>
   )
 }

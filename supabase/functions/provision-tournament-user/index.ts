@@ -8,9 +8,10 @@ type ProvisionInput = {
   password?: string
   role?: ProvisionRole
   teamId?: string
+  teamName?: string
   courtId?: string
   tournamentSlug?: string
-  bulkTeams?: Array<{ teamId: string; username: string }>
+  bulkTeams?: Array<{ teamId: string; teamName?: string; username: string }>
 }
 
 Deno.serve(async (request) => {
@@ -42,6 +43,7 @@ Deno.serve(async (request) => {
           username: team.username,
           role: 'team',
           teamId: team.teamId,
+          teamName: team.teamName,
         }))
       }
       return jsonResponse({ credentials })
@@ -58,6 +60,7 @@ Deno.serve(async (request) => {
       password: input.password,
       role: input.role,
       teamId: input.teamId,
+      teamName: input.teamName,
       courtId: input.courtId,
     })
 
@@ -76,14 +79,16 @@ async function provisionOne(input: {
   password?: string
   role: ProvisionRole
   teamId?: string
+  teamName?: string
   courtId?: string
 }) {
   const username = input.username.trim().toLowerCase()
-  const password = input.password || generateReadablePassword()
+  const password = input.password?.trim() || generateReadablePassword()
   const email = technicalEmail(username, input.tournamentSlug || Deno.env.get('AUTH_TOURNAMENT_SLUG') || input.tournamentName)
 
   if (input.role === 'team' && !input.teamId) throw new Error('teamId required for team account')
   if ((input.role === 'referee' || input.role === 'court_display') && !input.courtId) throw new Error('courtId required for court scoped account')
+  validatePassword(password)
 
   const { data: authUser, error: createError } = await input.adminClient.auth.admin.createUser({
     email,
@@ -103,7 +108,7 @@ async function provisionOne(input: {
     tournament_id: input.tournamentId,
     role: input.role,
     username,
-    display_name: username,
+    display_name: input.teamName?.trim() || username,
     team_id: input.teamId ?? null,
     court_id: input.courtId ?? null,
   })
@@ -118,6 +123,13 @@ async function provisionOne(input: {
     temporaryPassword: password,
     role: input.role,
     teamId: input.teamId,
+    teamName: input.teamName,
     courtId: input.courtId,
+  }
+}
+
+function validatePassword(password: string) {
+  if (password.length < 10 || !/[a-z]/i.test(password) || !/[0-9]/.test(password)) {
+    throw new Error('password must be at least 10 characters and contain one letter and one number')
   }
 }

@@ -78,6 +78,13 @@ describe('mapSupabaseTournamentState', () => {
     expect(tournament.teams).toHaveLength(2)
     expect(tournament.teams[0].players).toHaveLength(3)
     expect(tournament.teams[1].players).toHaveLength(3)
+    expect(tournament.teams[0].players[0]).toMatchObject({
+      id: 'red-1',
+      teamId: 'team-red-id',
+      firstName: 'Red',
+      lastName: 'Player 1',
+      gender: 'woman',
+    })
     expect(tournament.matches[0]).toMatchObject({
       id: 'match-id',
       teamAId: 'team-red-id',
@@ -105,6 +112,46 @@ describe('mapSupabaseTournamentState', () => {
     expect(tournament.matchEvents).toEqual([])
     expect(tournament.globalEvents).toEqual([])
     expect(tournament.standings).toEqual([])
+  })
+
+  it('maps teams with an empty players array when no player rows are present', () => {
+    const tournament = mapSupabaseTournamentState({
+      tournament: { id: 'tournament-id', name: 'Teams Without Players', phase: 'GROUP_STAGE' },
+      teams: [
+        { id: 'team-red-id', name: 'Team Red', short_name: 'RED', color: '#E23D28', group_id: 'group-id' },
+      ],
+      players: [],
+    })
+
+    expect(tournament.teams).toHaveLength(1)
+    expect(tournament.teams[0].players).toEqual([])
+  })
+
+  it('prefers first_name and last_name when Supabase roster columns are available', () => {
+    const tournament = mapSupabaseTournamentState({
+      tournament: { id: 'tournament-id', name: 'Roster Names', phase: 'GROUP_STAGE' },
+      teams: [
+        { id: 'team-red-id', name: 'Team Red', short_name: 'RED', color: '#E23D28', group_id: 'group-id' },
+      ],
+      players: [
+        {
+          id: 'red-1',
+          team_id: 'team-red-id',
+          first_name: 'Mario',
+          last_name: 'Rossi',
+          full_name: 'Legacy Name',
+          nickname: 'Legacy',
+          gender: 'male',
+        },
+      ],
+    })
+
+    expect(tournament.teams[0].players[0]).toMatchObject({
+      firstName: 'Mario',
+      lastName: 'Rossi',
+      name: 'Mario Rossi',
+      gender: 'man',
+    })
   })
 
   it('creates an empty Tournament domain object with no undefined arrays', () => {

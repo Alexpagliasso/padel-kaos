@@ -3,16 +3,17 @@ import type { ReactNode } from 'react'
 import { dataProvider } from '../../repositories'
 import { useAuth } from './authContext'
 import { getProtectedRouteDecision } from './protectedRouteState'
+import type { AppRole } from './authIdentity'
 
 type ProtectedRouteProps = {
-  allow: 'admin' | 'referee' | 'player' | 'court_display' | 'main_display'
+  allowedRoles: AppRole[]
   children: ReactNode
 }
 
-export function ProtectedRoute({ allow, children }: ProtectedRouteProps) {
+export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
   const location = useLocation()
   const { profile, status } = useAuth()
-  const decision = getProtectedRouteDecision({ provider: dataProvider, status, role: profile?.role, allow })
+  const decision = getProtectedRouteDecision({ provider: dataProvider, status, role: profile?.role, allowedRoles })
 
   if (decision.type === 'allow') return children
   if (decision.type === 'loading') {

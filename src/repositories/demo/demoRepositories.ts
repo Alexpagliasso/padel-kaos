@@ -43,5 +43,6 @@ export function useDemoEventRepository(): EventRepositoryContract {
 export function useDemoTeamRepository(): TeamRepositoryContract {
   return {
     createTeam: useDemoStore((state) => state.createTeam),
+    updateTeam: useDemoStore((state) => state.updateTeam),
   }
 }

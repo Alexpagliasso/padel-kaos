@@ -35,5 +35,6 @@ export type EventRepositoryContract = {
 }
 
 export type TeamRepositoryContract = {
-  createTeam: (input: CreateTeamInput) => void
+  createTeam: (input: CreateTeamInput & { tournamentId?: string }) => Promise<string> | string
+  updateTeam: (teamId: string, input: CreateTeamInput & { tournamentId?: string }) => Promise<string> | string
 }

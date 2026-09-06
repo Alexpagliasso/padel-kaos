@@ -58,21 +58,22 @@ export function getDefaultRouteForRole(role: AppRole) {
   return '/main-display'
 }
 
-export function roleCanAccessRoute(role: AppRole, route: 'admin' | 'referee' | 'player' | 'court_display' | 'main_display') {
-  if (role === 'admin') return true
+export type RouteAccessKey = 'admin' | 'referee' | 'player' | 'court_display' | 'main_display'
 
-  switch (route) {
-    case 'admin':
-      return false
-    case 'referee':
-      return role === 'referee'
-    case 'player':
-      return role === 'team'
-    case 'court_display':
-      return role === 'court_display'
-    case 'main_display':
-      return role === 'main_display'
-  }
+export const routeAccessMatrix: Record<RouteAccessKey, AppRole[]> = {
+  admin: ['admin'],
+  referee: ['referee'],
+  player: ['team'],
+  court_display: ['court_display', 'admin'],
+  main_display: ['main_display', 'admin'],
+}
+
+export function getAllowedRolesForRoute(route: RouteAccessKey) {
+  return routeAccessMatrix[route]
+}
+
+export function roleCanAccessRoute(role: AppRole, route: RouteAccessKey) {
+  return getAllowedRolesForRoute(route).includes(role)
 }
 
 export function normalizeAuthSlug(value: string) {

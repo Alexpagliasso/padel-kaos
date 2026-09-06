@@ -6,6 +6,7 @@ import {
   calculateGenderStartingScore,
   canEndMatch,
   canEndSet,
+  getAvailablePairs,
   canPlayCardInMatch,
   canRollDice,
   canScorePoint,
@@ -102,9 +103,9 @@ export const useDemoStore = create<DemoStore>()(
       selectMatch: (matchId) => set({ selectedMatchId: matchId }),
       selectCourt: (courtId) => set({ selectedCourtId: courtId }),
       setPorTresPrizeDraft: (prize) => set({ porTresPrizeDraft: prize }),
-      createTeam: (input) =>
+      createTeam: (input) => {
+        const id = `team-${slug(input.name)}-${Date.now()}`
         set((state) => {
-          const id = `team-${slug(input.name)}-${Date.now()}`
           const team: Team = {
             id,
             name: input.name,
@@ -113,9 +114,12 @@ export const useDemoStore = create<DemoStore>()(
             groupId: state.tournament.groups[0]?.id ?? 'demo-group-a',
             players: input.players.map((player, index) => ({
               id: `${id}-p${index + 1}`,
-              name: player.name,
-              nickname: player.name.split(' ')[0] || `P${index + 1}`,
-              gender: player.gender,
+              teamId: id,
+              firstName: player.firstName,
+              lastName: player.lastName,
+              name: `${player.firstName} ${player.lastName}`.trim(),
+              nickname: player.firstName || `P${index + 1}`,
+              gender: player.gender === 'female' ? 'woman' : 'man',
               accessToken: `demo_${id}_${index + 1}`,
             })),
           }
@@ -130,7 +134,39 @@ export const useDemoStore = create<DemoStore>()(
             },
             selectedTeamId: team.id,
           }
-        }),
+        })
+        return id
+      },
+      updateTeam: (teamId, input) => {
+        set((state) => ({
+          tournament: {
+            ...state.tournament,
+            teams: state.tournament.teams.map((team) => {
+              if (team.id !== teamId) return team
+              return {
+                ...team,
+                name: input.name,
+                shortName: input.name.slice(0, 4).toUpperCase(),
+                color: input.color || team.color,
+                players: input.players.map((player, index) => {
+                  const existingPlayer = team.players[index]
+                  return {
+                    id: player.id ?? existingPlayer?.id ?? `${teamId}-p${index + 1}`,
+                    teamId,
+                    firstName: player.firstName,
+                    lastName: player.lastName,
+                    name: `${player.firstName} ${player.lastName}`.trim(),
+                    nickname: player.firstName || `P${index + 1}`,
+                    gender: player.gender === 'female' ? 'woman' : 'man',
+                    accessToken: existingPlayer?.accessToken ?? `demo_${teamId}_${index + 1}`,
+                  }
+                }),
+              }
+            }),
+          },
+        }))
+        return teamId
+      },
       createMatch: (input) =>
         set((state) => {
           const teamA = findTeam(state.tournament, input.teamAId)
@@ -724,22 +760,24 @@ function ensureSecondSetLineups(tournament: Tournament, match: Match): MatchLine
   ]
 }
 
-function hasValidLineupsForSet(tournament: Tournament, match: Match, setNumber: 1 | 2) {
+function hasValidLineupsForSet(tournament: Tournament, match: Match, setNumber: 1 | 2 | 3) {
   const teamA = findTeam(tournament, match.teamAId)
   const teamB = findTeam(tournament, match.teamBId)
   if (!teamA || !teamB) return false
   const teamALineup = match.lineups.find((lineup) => lineup.teamId === teamA.id && lineup.setNumber === setNumber)
   const teamBLineup = match.lineups.find((lineup) => lineup.teamId === teamB.id && lineup.setNumber === setNumber)
   if (!teamALineup || !teamBLineup) return false
-  const previousA = match.lineups.find((lineup) => lineup.teamId === teamA.id && lineup.setNumber === setNumber - 1)
-  const previousB = match.lineups.find((lineup) => lineup.teamId === teamB.id && lineup.setNumber === setNumber - 1)
+  const previousA = match.lineups.filter((lineup) => lineup.teamId === teamA.id && lineup.setNumber < setNumber)
+  const previousB = match.lineups.filter((lineup) => lineup.teamId === teamB.id && lineup.setNumber < setNumber)
   return validateLineup(teamA, teamALineup, previousA).valid && validateLineup(teamB, teamBLineup, previousB).valid
 }
 
 function rotateLineup(team: Team, previous?: MatchLineup): MatchLineup {
-  const mustEnter = previous?.benchPlayerId ?? team.players[2].id
-  const partner = team.players.find((player) => player.id !== mustEnter && player.id !== previous?.activePlayerIds[0])?.id ?? team.players[0].id
-  const activePlayerIds: [string, string] = [mustEnter, partner]
+  const availablePair = getAvailablePairs(team.players, previous ? [previous] : [])[0]
+  const activePlayerIds: [string, string] = availablePair ?? [
+    previous?.benchPlayerId ?? team.players[2].id,
+    team.players.find((player) => player.id !== previous?.benchPlayerId)?.id ?? team.players[0].id,
+  ]
   return {
     teamId: team.id,
     setNumber: 2,

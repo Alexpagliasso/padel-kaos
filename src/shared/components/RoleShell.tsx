@@ -1,17 +1,15 @@
 import { Link, NavLink } from 'react-router-dom'
-import { Activity, Crown, Radio, Shield, Trophy, Tv } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useContext, type ReactNode } from 'react'
+import { AuthContext } from '../../features/auth/authContext'
+import { LogoutButton } from '../../features/auth/LogoutButton'
+import { dataProvider } from '../../repositories'
 import { cn } from '../lib/cn'
-
-const navItems = [
-  { to: '/admin', label: 'Admin', icon: Shield },
-  { to: '/player', label: 'Player', icon: Crown },
-  { to: '/referee', label: 'Referee', icon: Radio },
-  { to: '/court-display', label: 'Court', icon: Tv },
-  { to: '/main-display', label: 'Main', icon: Trophy },
-]
+import { Activity, getRoleShellNavItems } from './roleNavigation'
 
 export function RoleShell({ children }: { children: ReactNode }) {
+  const auth = useContext(AuthContext)
+  const navItems = getRoleShellNavItems(dataProvider, auth?.profile?.role)
+
   return (
     <div className="min-h-svh bg-[#0B0B0B] text-white">
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0B0B0B]/90 backdrop-blur">
@@ -44,6 +42,7 @@ export function RoleShell({ children }: { children: ReactNode }) {
               </NavLink>
             ))}
           </nav>
+          {dataProvider === 'supabase' && auth?.profile ? <LogoutButton compact /> : null}
         </div>
       </header>
       {children}

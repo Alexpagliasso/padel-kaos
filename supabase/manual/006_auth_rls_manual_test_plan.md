@@ -1,6 +1,6 @@
 # Auth and RLS Manual Test Plan
 
-Do not commit real credentials. Create temporary test users only after `008_bootstrap_auth_test.sql` and `009_verify_admin_bootstrap.sql` both succeed.
+Do not commit real credentials. Create temporary test users only from `/admin/access` after `008_bootstrap_auth_test.sql` and `009_verify_admin_bootstrap.sql` both succeed.
 
 ## Bootstrap IDs
 
@@ -17,59 +17,116 @@ team_blue_id
 match_id
 ```
 
-Use those IDs when provisioning scoped Auth test accounts.
+Use these IDs only as expected references while checking scoped access.
 
-## Test Accounts To Provision Later
+## Account Creation Order
 
-- `admin`
-- `referee_test`
-- `team_red_test`
-- `team_blue_test`
-- `court_display_test`
-- `main_display_test`
+1. `ADMIN`
+   - Login as the manually created `admin` user.
+   - Open `/admin/access`.
+   - Confirm the current tournament is the bootstrap tournament.
 
-Suggested scopes:
+2. `TEAM RED`
+   - Use preset `Team Red`.
+   - Username: `team_red`.
+   - Role: `team`.
+   - Assignment: Team Red / `team_red_id`.
+   - Leave password empty to auto-generate, unless a manual test password is needed.
 
-- `admin`: existing manually created Admin Auth user with a bootstrap `profiles` row.
-- `referee_test`: role `referee`, `courtId = court_1_id`.
-- `team_red_test`: role `team`, `teamId = team_red_id`.
-- `team_blue_test`: role `team`, `teamId = team_blue_id`.
-- `court_display_test`: role `court_display`, `courtId = court_1_id`.
-- `main_display_test`: role `main_display`.
+3. `TEAM BLUE`
+   - Use preset `Team Blue`.
+   - Username: `team_blue`.
+   - Role: `team`.
+   - Assignment: Team Blue / `team_blue_id`.
+   - Leave password empty to auto-generate, unless a manual test password is needed.
 
-Use separate browser sessions or separate Supabase clients authenticated as each account.
+4. `REFEREE`
+   - Use preset `Referee`.
+   - Username: `referee_test`.
+   - Role: `referee`.
+   - Assignment: Court 1 / `court_1_id`.
 
-## Team Red vs Team Blue
+5. `COURT DISPLAY`
+   - Use preset `Court Display`.
+   - Username: `court_display_test`.
+   - Role: `court_display`.
+   - Assignment: Court 1 / `court_1_id`.
 
-- Team Red can read Team Red rows and the shared match on `match_id`.
-- Team Red can select its own `match_cards`.
-- Team Red gets zero rows or denied access for Team Blue `available` `match_cards`.
-- Team Red can call `play_card` for its own valid card.
-- Team Red is denied when calling `play_card` for Team Blue card.
-- Repeat symmetrically for Team Blue.
+6. `MAIN DISPLAY`
+   - Use preset `Main Display`.
+   - Username: `main_display_test`.
+   - Role: `main_display`.
+   - No team or court assignment.
 
-## Referee
+Temporary passwords are visible only immediately after provisioning. Save them outside the repository.
 
-- `referee_test` assigned to `court_1_id` can read and update allowed match state for `match_id`.
-- `referee_test` is denied updating matches assigned to `court_2_id`.
-- `referee_test` can register a valid Por Tres winner for an active player in an assigned match.
+## Admin Expected Results
 
-## Court Display
+- Login: `admin`.
+- Can open `/admin`, `/admin/setup`, `/admin/control-room`, `/admin/access`, `/admin/recovery`.
+- Can read tournament, teams, players, courts, rounds, matches, lineups, global events.
+- Can create the five test users through `provision-tournament-user`.
+- Can preview `/main-display` and `/court-display`.
 
-- `court_display_test` assigned to `court_1_id` can read assigned-court match data for `match_id`.
-- `court_display_test` is denied match updates.
-- `court_display_test` cannot read private opponent cards with `available` status.
+## Team Red Expected Results
 
-## Main Display
+- Login: `team_red`.
+- Route: `/player`.
+- Readable matches: includes `match_id`.
+- Visible teams/players: Team Red and allowed match context only.
+- Own `match_cards`: accessible when cards exist for Team Red.
+- Team Blue `available` `match_cards`: not accessible, should return zero rows or be denied by RLS.
+- Mutation check: can request/play only its own valid card; denied for Team Blue card.
 
-- `main_display_test` can read global/tournament live state for `tournament_id`.
-- `main_display_test` cannot read private `match_cards`.
-- `main_display_test` is denied all mutations.
+## Team Blue Expected Results
 
-## Admin
+- Login: `team_blue`.
+- Route: `/player`.
+- Readable matches: includes `match_id`.
+- Own `match_cards`: accessible when cards exist for Team Blue.
+- Team Red `available` `match_cards`: not accessible, should return zero rows or be denied by RLS.
+- Mutation check: can request/play only its own valid card; denied for Team Red card.
 
-- `admin` can manage `tournament_id`.
-- `admin` cannot access another tournament unless it has a profile scoped to that tournament.
+## Referee Expected Results
+
+- Login: `referee_test`.
+- Route: `/referee`.
+- Scope: Court 1 / `court_1_id`.
+- Readable matches: includes `match_id`.
+- Update match: allowed for `match_id`.
+- Update another court match, if present on `court_2_id`: denied.
+- Private `available` opponent cards: not readable; non-private active/resolved card context may be visible.
+
+## Court Display Expected Results
+
+- Login: `court_display_test`.
+- Route: `/court-display`.
+- Scope: Court 1 / `court_1_id`.
+- Readable matches: includes `match_id`.
+- Match updates: denied.
+- Private `available` cards: not readable.
+- Public applied/active card state may be visible according to RLS.
+
+## Main Display Expected Results
+
+- Login: `main_display_test`.
+- Route: `/main-display`.
+- Readable: tournament/global live state and matches allowed for display.
+- Private `match_cards`: none visible.
+- Mutations: denied.
+
+## Optional DEV RLS Debug Panel
+
+In development only, `/admin/access` shows an RLS debug panel for the current authenticated profile:
+
+- current role
+- current team/court
+- readable match count
+- own visible `match_cards`
+- opponent available `match_cards` visible
+- update-match expectation
+
+The panel does not show passwords or secrets and does not run automatic update mutations.
 
 ## Reset And Cleanup
 

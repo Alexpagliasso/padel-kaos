@@ -2,7 +2,6 @@ import type {
   CardState,
   DiceRule,
   GenderStartingScore,
-  Player,
   TeamSide,
   Tournament,
 } from '../shared/types/domain'
@@ -69,7 +68,8 @@ export type DemoActions = {
   selectMatch: (matchId: string) => void
   selectCourt: (courtId: string) => void
   setPorTresPrizeDraft: (prize: string) => void
-  createTeam: (input: CreateTeamInput) => void
+  createTeam: (input: CreateTeamInput) => string
+  updateTeam: (teamId: string, input: CreateTeamInput) => string
   createMatch: (input: CreateMatchInput) => void
   assignCard: (teamId: string, cardId: string, matchId?: string) => void
   drawMatchCards: (matchId: string) => void
@@ -91,7 +91,12 @@ export type DemoStore = DemoState & DemoActions
 export type CreateTeamInput = {
   name: string
   color: string
-  players: Array<Pick<Player, 'name' | 'gender'>>
+  players: Array<{
+    id?: string
+    firstName: string
+    lastName: string
+    gender: 'male' | 'female'
+  }>
 }
 
 export type CreateMatchInput = {

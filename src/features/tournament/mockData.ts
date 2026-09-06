@@ -2,24 +2,24 @@ import type { Player, Tournament } from '../../shared/types/domain'
 
 const players: Record<'a' | 'b' | 'c' | 'd', Player[]> = {
   a: [
-    { id: 'p-a1', name: 'Luca Bianchi', nickname: 'Laser', gender: 'man', accessToken: 'tok_laser_7fA91' },
-    { id: 'p-a2', name: 'Marta Riva', nickname: 'Volpe', gender: 'woman', accessToken: 'tok_volpe_3dK22' },
-    { id: 'p-a3', name: 'Nico Serra', nickname: 'Turbo', gender: 'man', accessToken: 'tok_turbo_8hP19' },
+    { id: 'p-a1', teamId: 'team-a', firstName: 'Luca', lastName: 'Bianchi', name: 'Luca Bianchi', nickname: 'Laser', gender: 'man', accessToken: 'tok_laser_7fA91' },
+    { id: 'p-a2', teamId: 'team-a', firstName: 'Marta', lastName: 'Riva', name: 'Marta Riva', nickname: 'Volpe', gender: 'woman', accessToken: 'tok_volpe_3dK22' },
+    { id: 'p-a3', teamId: 'team-a', firstName: 'Nico', lastName: 'Serra', name: 'Nico Serra', nickname: 'Turbo', gender: 'man', accessToken: 'tok_turbo_8hP19' },
   ],
   b: [
-    { id: 'p-b1', name: 'Sara Conti', nickname: 'Slam', gender: 'woman', accessToken: 'tok_slam_2nQ51' },
-    { id: 'p-b2', name: 'Diego Ferri', nickname: 'D-Fire', gender: 'man', accessToken: 'tok_dfire_5zM66' },
-    { id: 'p-b3', name: 'Elia Costa', nickname: 'Muro', gender: 'man', accessToken: 'tok_muro_9aX44' },
+    { id: 'p-b1', teamId: 'team-b', firstName: 'Sara', lastName: 'Conti', name: 'Sara Conti', nickname: 'Slam', gender: 'woman', accessToken: 'tok_slam_2nQ51' },
+    { id: 'p-b2', teamId: 'team-b', firstName: 'Diego', lastName: 'Ferri', name: 'Diego Ferri', nickname: 'D-Fire', gender: 'man', accessToken: 'tok_dfire_5zM66' },
+    { id: 'p-b3', teamId: 'team-b', firstName: 'Elia', lastName: 'Costa', name: 'Elia Costa', nickname: 'Muro', gender: 'man', accessToken: 'tok_muro_9aX44' },
   ],
   c: [
-    { id: 'p-c1', name: 'Giada Mori', nickname: 'Ace', gender: 'woman', accessToken: 'tok_ace_1qW72' },
-    { id: 'p-c2', name: 'Paolo Neri', nickname: 'Spin', gender: 'man', accessToken: 'tok_spin_6rT80' },
-    { id: 'p-c3', name: 'Irene Villa', nickname: 'Ivy', gender: 'woman', accessToken: 'tok_ivy_4bC03' },
+    { id: 'p-c1', teamId: 'team-c', firstName: 'Giada', lastName: 'Mori', name: 'Giada Mori', nickname: 'Ace', gender: 'woman', accessToken: 'tok_ace_1qW72' },
+    { id: 'p-c2', teamId: 'team-c', firstName: 'Paolo', lastName: 'Neri', name: 'Paolo Neri', nickname: 'Spin', gender: 'man', accessToken: 'tok_spin_6rT80' },
+    { id: 'p-c3', teamId: 'team-c', firstName: 'Irene', lastName: 'Villa', name: 'Irene Villa', nickname: 'Ivy', gender: 'woman', accessToken: 'tok_ivy_4bC03' },
   ],
   d: [
-    { id: 'p-d1', name: 'Tommaso Greco', nickname: 'T-Grex', gender: 'man', accessToken: 'tok_tgrex_0vL11' },
-    { id: 'p-d2', name: 'Alma Fonti', nickname: 'Flash', gender: 'woman', accessToken: 'tok_flash_7yN38' },
-    { id: 'p-d3', name: 'Ruben Sala', nickname: 'Chop', gender: 'man', accessToken: 'tok_chop_2sH84' },
+    { id: 'p-d1', teamId: 'team-d', firstName: 'Tommaso', lastName: 'Greco', name: 'Tommaso Greco', nickname: 'T-Grex', gender: 'man', accessToken: 'tok_tgrex_0vL11' },
+    { id: 'p-d2', teamId: 'team-d', firstName: 'Alma', lastName: 'Fonti', name: 'Alma Fonti', nickname: 'Flash', gender: 'woman', accessToken: 'tok_flash_7yN38' },
+    { id: 'p-d3', teamId: 'team-d', firstName: 'Ruben', lastName: 'Sala', name: 'Ruben Sala', nickname: 'Chop', gender: 'man', accessToken: 'tok_chop_2sH84' },
   ],
 }
 

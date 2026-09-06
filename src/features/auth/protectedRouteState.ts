@@ -1,5 +1,5 @@
 import type { AppRole } from './authIdentity'
-import { getDefaultRouteForRole, roleCanAccessRoute } from './authIdentity'
+import { getDefaultRouteForRole } from './authIdentity'
 
 export type ProtectedRouteDecision =
   | { type: 'allow' }
@@ -11,11 +11,11 @@ export function getProtectedRouteDecision(input: {
   provider: 'demo' | 'supabase'
   status: 'loading' | 'authenticated' | 'unauthenticated'
   role?: AppRole
-  allow: 'admin' | 'referee' | 'player' | 'court_display' | 'main_display'
+  allowedRoles: AppRole[]
 }): ProtectedRouteDecision {
   if (input.provider === 'demo') return { type: 'allow' }
   if (input.status === 'loading') return { type: 'loading' }
   if (!input.role) return { type: 'login' }
-  if (!roleCanAccessRoute(input.role, input.allow)) return { type: 'redirect', to: getDefaultRouteForRole(input.role) }
+  if (!input.allowedRoles.includes(input.role)) return { type: 'redirect', to: getDefaultRouteForRole(input.role) }
   return { type: 'allow' }
 }

@@ -13,23 +13,83 @@ export type GenderAwareLineup = {
   activePlayers: Pick<Player, 'id' | 'gender'>[]
 }
 
-export function validateLineup(team: Team, lineup: MatchLineup, previous?: MatchLineup) {
-  const playerIds = new Set(team.players.map((player) => player.id))
-  const selectedIds = [...lineup.activePlayerIds, lineup.benchPlayerId]
+export type PlayerPair = [string, string]
 
-  if (selectedIds.length !== new Set(selectedIds).size) {
-    return { valid: false, reason: 'Ogni giocatore puo comparire una sola volta nella lineup.' }
+export function normalizePair(playerAId: string, playerBId: string) {
+  return [playerAId, playerBId].sort().join('::')
+}
+
+type LineupPairCandidate = { activePlayerIds: readonly string[] }
+
+export function isPairAlreadyUsed(candidateLineup: LineupPairCandidate, previousLineups: LineupPairCandidate[]) {
+  const candidatePair = normalizePair(candidateLineup.activePlayerIds[0], candidateLineup.activePlayerIds[1])
+  return previousLineups.some((lineup) => normalizePair(lineup.activePlayerIds[0], lineup.activePlayerIds[1]) === candidatePair)
+}
+
+export function getAvailablePairs(roster: Pick<Player, 'id'>[], usedLineups: LineupPairCandidate[]): PlayerPair[] {
+  const usedPairs = new Set(usedLineups.map((lineup) => normalizePair(lineup.activePlayerIds[0], lineup.activePlayerIds[1])))
+  const pairs: PlayerPair[] = []
+
+  for (let firstIndex = 0; firstIndex < roster.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < roster.length; secondIndex += 1) {
+      const pair: PlayerPair = [roster[firstIndex].id, roster[secondIndex].id]
+      if (!usedPairs.has(normalizePair(pair[0], pair[1]))) pairs.push(pair)
+    }
   }
 
-  if (!selectedIds.every((playerId) => playerIds.has(playerId))) {
+  return pairs
+}
+
+export function getRemainingPair(roster: Pick<Player, 'id'>[], usedLineups: LineupPairCandidate[]) {
+  const availablePairs = getAvailablePairs(roster, usedLineups)
+  return availablePairs.length === 1 ? availablePairs[0] : undefined
+}
+
+export function validateMatchLineup({
+  candidate,
+  usedLineups,
+  roster,
+}: {
+  candidate: { activePlayerIds: string[] }
+  usedLineups: LineupPairCandidate[]
+  roster: Pick<Player, 'id'>[]
+}) {
+  const playerIds = new Set(roster.map((player) => player.id))
+  const activePlayerIds = candidate.activePlayerIds
+
+  if (activePlayerIds.length !== 2) {
+    return { valid: false, reason: 'La lineup deve contenere esattamente 2 giocatori.' }
+  }
+
+  if (activePlayerIds[0] === activePlayerIds[1]) {
+    return { valid: false, reason: 'I 2 giocatori in campo devono essere diversi.' }
+  }
+
+  if (!activePlayerIds.every((playerId) => playerIds.has(playerId))) {
     return { valid: false, reason: 'La lineup contiene giocatori fuori squadra.' }
   }
 
-  if (previous && !lineup.activePlayerIds.includes(previous.benchPlayerId)) {
-    return {
-      valid: false,
-      reason: 'Il giocatore rimasto fuori nel set precedente deve entrare nel set successivo.',
-    }
+  if (isPairAlreadyUsed({ activePlayerIds: [activePlayerIds[0], activePlayerIds[1]] }, usedLineups)) {
+    return { valid: false, reason: 'Questa coppia e gia stata usata nella partita.' }
+  }
+
+  return { valid: true }
+}
+
+export function validateLineup(team: Team, lineup: MatchLineup, usedLineups: MatchLineup[] = []) {
+  const result = validateMatchLineup({
+    candidate: lineup,
+    usedLineups,
+    roster: team.players,
+  })
+  if (!result.valid) return result
+
+  const playerIds = new Set(team.players.map((player) => player.id))
+  if (lineup.benchPlayerId && !playerIds.has(lineup.benchPlayerId)) {
+    return { valid: false, reason: 'La lineup contiene giocatori fuori squadra.' }
+  }
+  if (lineup.benchPlayerId && lineup.activePlayerIds.includes(lineup.benchPlayerId)) {
+    return { valid: false, reason: 'Ogni giocatore puo comparire una sola volta nella lineup.' }
   }
 
   return { valid: true }

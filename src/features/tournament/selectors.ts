@@ -1,4 +1,5 @@
 import type { Match, Team, Tournament } from '../../shared/types/domain'
+import { getPlayerDisplayName } from '../../shared/lib/playerNames'
 
 export function getTeam(tournament: Tournament, teamId: string) {
   return tournament.teams.find((team) => team.id === teamId)
@@ -13,7 +14,8 @@ export function getCurrentLineups(match: Match) {
 }
 
 export function getPlayerName(team: Team | undefined, playerId: string) {
-  return team?.players.find((player) => player.id === playerId)?.nickname ?? 'TBD'
+  const player = team?.players.find((item) => item.id === playerId)
+  return player ? getPlayerDisplayName(player) : 'TBD'
 }
 
 export function getDiceRuleForMatch(tournament: Tournament, match: Match) {
