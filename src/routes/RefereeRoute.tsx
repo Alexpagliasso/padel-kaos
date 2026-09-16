@@ -21,6 +21,7 @@ import { useMatchRepository } from '../repositories/matchRepository'
 import { useDemoStore } from '../demo/demoStore'
 import { listMyRefereeCourtIds } from '../services/supabase/provisioning'
 import { LogoutButton } from '../features/auth/LogoutButton'
+import { useLiveOrchestrationRepository, type SetAction } from '../repositories/liveOrchestrationRepository'
 
 export function RefereeRoute() {
   const { profile, status: authStatus } = useAuth()
@@ -194,6 +195,8 @@ export function RefereeAssignedCourtsView({ tournament, courtIds, isLoading, err
 function RefereePreparationView({ tournament, courtId, isLoading, error, headerAction }: { tournament: ReturnType<typeof useTournament>['data']; courtId: string; isLoading?: boolean; error?: string; headerAction?: ReactNode }) {
   const assigned = tournament.matches.filter(match => match.courtId === courtId)
   const [selectedId, setSelectedId] = useState('')
+  const [lifecycleFeedback, setLifecycleFeedback] = useState('')
+  const live = useLiveOrchestrationRepository(tournament.id)
   if (isLoading) return <MobileRoleShell title="Area arbitro" action={headerAction}><main className="p-4"><p>Caricamento partite…</p></main></MobileRoleShell>
   if (error) return <MobileRoleShell title="Area arbitro" action={headerAction}><main className="p-4"><EmptyState title="Impossibile caricare la partita" /></main></MobileRoleShell>
   if (!courtId) return <MobileRoleShell title="Area arbitro" action={headerAction}><main className="p-4"><EmptyState title="Nessun campo assegnato" /></main></MobileRoleShell>
@@ -203,11 +206,25 @@ function RefereePreparationView({ tournament, courtId, isLoading, error, headerA
   const teamA = tournament.teams.find(item => item.id === match.teamAId)
   const teamB = tournament.teams.find(item => item.id === match.teamBId)
   const round = tournament.rounds?.find(item => item.id === match.roundId)
+  const control = async (action: SetAction, success: string) => {
+    setLifecycleFeedback('')
+    try { await live.controlRefereeMatch(match.id, action); setLifecycleFeedback(success) }
+    catch (cause) { setLifecycleFeedback(cause instanceof Error ? cause.message : 'Operazione non riuscita.') }
+  }
   return <MobileRoleShell title={court?.name ?? 'Campo'} status={match.status} action={headerAction}>
     <main className="mx-auto max-w-3xl space-y-5 px-4 py-5">
       <header><p className="text-sm font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">{court?.name ?? 'Campo assegnato'}</p><h1 className="mt-2 text-3xl font-black">{teamA?.name} vs {teamB?.name}</h1><p className="text-white/55">{round?.name ?? 'Turno'} · {tournament.groups.find(group => group.id === match.groupId)?.name ?? 'Girone'}</p></header>
       {assigned.length > 1 ? <label className="grid gap-1 text-sm font-bold text-white/55">Partita<select className="rounded border border-white/10 bg-black px-3 py-3 text-white" value={match.id} onChange={event => setSelectedId(event.target.value)}>{assigned.map(item => { const a=tournament.teams.find(team=>team.id===item.teamAId); const b=tournament.teams.find(team=>team.id===item.teamBId); return <option key={item.id} value={item.id}>{a?.shortName} vs {b?.shortName} · {item.status}</option> })}</select></label> : null}
       <Readiness match={match} teams={[teamA, teamB]} />
+      {tournament.setControlMode === 'referee' ? <section className="grid gap-2 rounded border border-white/10 bg-[#171717] p-5">
+        {!round?.openedAt ? <p className="font-bold text-amber-100">In attesa dell’apertura del turno da parte della Regia.</p> : <>
+          {['scheduled', 'ready'].includes(match.status) && <button className="rounded bg-[var(--event-primary)] px-4 py-4 font-black text-black" disabled={live.isPending} onClick={() => void control('start_set_1', 'Set 1 avviato.')}>AVVIA SET</button>}
+          {match.status === 'live_set_1' && <button className="rounded bg-white/10 px-4 py-4 font-black" disabled={live.isPending} onClick={() => void control('end_set_1', 'Set 1 terminato.')}>TERMINA SET</button>}
+          {match.status === 'set_break' && <button className="rounded bg-[var(--event-primary)] px-4 py-4 font-black text-black" disabled={live.isPending} onClick={() => void control('start_set_2', 'Set 2 avviato.')}>AVVIA SET</button>}
+          {match.status === 'live_set_2' && <button className="rounded bg-white/10 px-4 py-4 font-black" disabled={live.isPending} onClick={() => void control('end_set_2', 'Set 2 terminato.')}>TERMINA SET</button>}
+        </>}
+        {(lifecycleFeedback || live.error) && <p className="rounded bg-white/10 p-3 font-bold">{lifecycleFeedback || live.error}</p>}
+      </section> : <p className="rounded border border-white/10 bg-[#171717] p-4 text-white/60">La gestione dei set è controllata dalla Regia.</p>}
     </main>
   </MobileRoleShell>
 }

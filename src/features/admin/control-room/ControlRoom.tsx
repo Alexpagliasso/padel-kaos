@@ -2,21 +2,22 @@ import { Alert, Box, Chip, Paper, Stack, Typography } from '@mui/material'
 import { PageShell, SectionHeader, EmptyState, StatusChip } from '../../../shared/components/Foundation'
 import { formatStatusLabel } from '../../../shared/lib/uiLabels'
 import type { Tournament } from '../../../shared/types/domain'
-import { useAdminWorkspace } from '../workspace/useAdminWorkspace'
+import { useScheduleManagement } from '../../../repositories/scheduleRepository'
 import { entryFromTournament, useWorkspaceStore, type WorkspaceEntry } from '../workspace/workspaceStore'
 import { MatchReportCard } from '../reports/MatchReportCard'
 import { OperationsControls } from './OperationsControls'
 import { getControlRoomRound, getCurrentRoundMatches } from './controlRoomState'
 
 export function ControlRoom() {
-  const workspace = useAdminWorkspace()
+  const workspace = useScheduleManagement()
   if (!workspace.entry) return <PageShell><EmptyState title="Seleziona o crea un torneo" /></PageShell>
   if (workspace.isLoading && !workspace.entry.local) return <PageShell><EmptyState title="Caricamento regia" /></PageShell>
   if (workspace.error && !workspace.entry.local) return <PageShell><EmptyState title="Impossibile caricare la regia" detail={workspace.error} /></PageShell>
-  return <ControlRoomContent key={workspace.data.id} tournament={workspace.data} entry={workspace.entry} />
+  return <ControlRoomContent key={workspace.data.id} tournament={workspace.data} entry={workspace.entry} referees={workspace.referees} />
 }
-export function ControlRoomContent({ tournament, entry: providedEntry }: {
+export function ControlRoomContent({ tournament, entry: providedEntry, referees = [] }: {
   tournament: Tournament; entry?: WorkspaceEntry
+  referees?: Array<{ courtId: string; name: string }>
   porTresPrizeDraft?: string; onPorTresPrizeChange?: (value: string) => void
   onActivatePorTres?: (prize: string) => void; onRollGlobalDice?: (matchId: string) => void
 }) {
@@ -48,7 +49,11 @@ export function ControlRoomContent({ tournament, entry: providedEntry }: {
                 {!courtMatches.length && <Typography color="text.secondary">Campo disponibile / nessuna partita assegnata</Typography>}
                 {courtMatches.map(match => {
                   const report = reports.find(item => item.matchId === match.id)
-                  return <Box key={match.id} sx={{ mb: 2 }}><Typography sx={{ fontWeight: 850, mb: 1 }}>{tournament.teams.find(team => team.id === match.teamAId)?.name ?? 'Da definire'} vs {tournament.teams.find(team => team.id === match.teamBId)?.name ?? 'Da definire'}</Typography><Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}><StatusChip label={match.status} /><Chip size="small" label={report ? 'Report / ' + formatStatusLabel(report.status) : match.status === 'completed' ? 'In attesa del report arbitrale' : 'Arbitro / partita in corso'} /></Stack></Box>
+                  const requiredSet = match.status === 'set_break' || match.status === 'live_set_2' ? 2 : 1
+                  const missing = [match.teamAId, match.teamBId].filter(teamId => !match.lineups.some(lineup => lineup.teamId === teamId && lineup.setNumber === requiredSet))
+                  const cards = tournament.teamCards.filter(card => card.matchId === match.id).length
+                  const referee = referees.find(item => item.courtId === court.id)?.name ?? 'Da assegnare'
+                  return <Box key={match.id} sx={{ mb: 2 }}><Typography sx={{ fontWeight: 850, mb: 1 }}>{tournament.teams.find(team => team.id === match.teamAId)?.name ?? 'Da definire'} vs {tournament.teams.find(team => team.id === match.teamBId)?.name ?? 'Da definire'}</Typography><Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}><StatusChip label={match.status} /><Chip size="small" label={`Arbitro · ${referee}`} /><Chip size="small" color={missing.length ? 'warning' : 'success'} label={missing.length ? 'Formazioni incomplete' : 'Formazioni pronte'} /><Chip size="small" color={cards ? 'success' : 'warning'} label={cards ? `Carte assegnate · ${cards}` : 'Carte da assegnare'} />{report && <Chip size="small" label={'Report · ' + formatStatusLabel(report.status)} />}</Stack></Box>
                 })}
               </Paper>
             })}
@@ -56,7 +61,7 @@ export function ControlRoomContent({ tournament, entry: providedEntry }: {
         </Box>
         <Box><Typography variant="h2" sx={{ mb: 2 }}>Report finali delle partite</Typography><Stack spacing={3}>{reports.length ? reports.map(report => <MatchReportCard key={report.id} report={report} />) : <EmptyState title="Nessun report partita inviato" detail="Arbitro invia il report finale dopo aver completato la partita." />}</Stack></Box>
       </Stack>
-      <Box component="aside"><OperationsControls entry={entry} roundId={round?.id} roundName={round?.name} /></Box>
+      <Box component="aside"><OperationsControls entry={entry} tournament={tournament} matches={matches} roundId={round?.id} roundName={round?.name} /></Box>
     </Box>
   </PageShell>
 }

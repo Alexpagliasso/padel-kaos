@@ -35,6 +35,7 @@ export type SupabaseTournamentRow = {
   theme_color?: string | null
   created_at?: string | null
   updated_at?: string | null
+  set_control_mode?: string | null
 }
 
 export type SupabaseGroupRow = {
@@ -80,6 +81,7 @@ export type SupabaseRoundRow = {
   dice_rule_id: string | null
   dice_started_at: string | null
   dice_ends_at: string | null
+  opened_at?: string | null
 }
 
 export type SupabaseMatchRow = {
@@ -95,6 +97,10 @@ export type SupabaseMatchRow = {
   games_b: number
   sets_a: number
   sets_b: number
+  set_1_started_at?: string | null
+  set_1_ended_at?: string | null
+  set_2_started_at?: string | null
+  set_2_ended_at?: string | null
 }
 
 export type SupabaseMatchLineupRow = {
@@ -239,6 +245,10 @@ export function mapSupabaseTournamentState(dto: SupabaseTournamentStateDto): Tou
     activeCardUsageIds: (dto.teamCards ?? [])
       .filter((card) => card.match_id === match.id && (card.status === 'pending' || card.status === 'active'))
       .map((card) => card.id),
+    set1StartedAt: match.set_1_started_at ?? undefined,
+    set1EndedAt: match.set_1_ended_at ?? undefined,
+    set2StartedAt: match.set_2_started_at ?? undefined,
+    set2EndedAt: match.set_2_ended_at ?? undefined,
   }))
 
   return {
@@ -256,6 +266,7 @@ export function mapSupabaseTournamentState(dto: SupabaseTournamentStateDto): Tou
     themeColor: dto.tournament.theme_color ?? null,
     createdAt: dto.tournament.created_at ?? null,
     updatedAt: dto.tournament.updated_at ?? null,
+    setControlMode: dto.tournament.set_control_mode === 'referee' ? 'referee' : 'centralized',
     groups: (dto.groups ?? []).map((group) => ({ id: group.id, name: group.name, tournamentId: group.tournament_id ?? dto.tournament.id, sortOrder: group.sort_order, assignedCourtId: group.assigned_court_id ?? null })),
     courts: (dto.courts ?? []).map((court) => ({ id: court.id, name: court.name })),
     rounds: (dto.rounds ?? []).map(mapRound),
@@ -326,6 +337,7 @@ function mapRound(round: SupabaseRoundRow): Round {
     diceRuleId: round.dice_rule_id ?? undefined,
     diceStartedAt: round.dice_started_at ?? undefined,
     diceEndsAt: round.dice_ends_at ?? undefined,
+    openedAt: round.opened_at ?? undefined,
   }
 }
 
@@ -434,6 +446,7 @@ function mapMatchStatus(status: string): MatchStatus {
 
 function mapRoundStatus(status: string): Round['status'] {
   if (status === 'set_1') return 'live_set_1'
+  if (status === 'set_break') return 'set_break'
   if (status === 'waiting_global_dice') return 'waiting_for_global_dice'
   if (status === 'set_2') return 'live_set_2'
   if (status === 'kaos_active' || status === 'scheduled' || status === 'completed') return status

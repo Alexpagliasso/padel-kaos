@@ -6,7 +6,7 @@ import { AuthContext } from '../features/auth/authContext'
 import type { AppProfile } from '../features/auth/authIdentity'
 import { mapSupabaseTournamentState, type SupabaseTournamentStateDto } from '../repositories/supabase/mappers/tournamentMapper'
 import type { Tournament } from '../shared/types/domain'
-import { PlayerRouteContent } from './PlayerRoute'
+import { getOwnMatchCards, getRequiredLineupSet, PlayerRouteContent } from './PlayerRoute'
 import { resolvePlayerRouteState } from './playerRouteState'
 
 const profile: AppProfile = {
@@ -258,10 +258,31 @@ describe('PlayerRouteContent', () => {
       </AuthContext.Provider>,
     )
 
-    expect(html).toContain('AREA GIOCATORE')
+    expect(html).toContain('Area giocatore')
     expect(html).toContain('Ciao Red Player 1')
     expect(html).toContain('Team Red')
     expect(html).toContain('Esci')
+    expect(html).toContain('Formazione')
+    expect(html).toContain('Carte')
+    expect(html).toContain('Classifica')
+    expect(html).toContain('Risultati')
+    expect(html).not.toMatch(/Ã|Â|âœ|â€|â€™/)
     expect(html).not.toContain('view as simulator')
+  })
+
+  it('opens Set 2 only after Set 1 ends and never requests the automatic STB', () => {
+    const tournament = createTournament()
+    const match = tournament.matches[0]
+    expect(getRequiredLineupSet(match)).toBe(1)
+    expect(getRequiredLineupSet({ ...match, status: 'set_break', set1StartedAt: '2026-09-16T10:00:00Z', set1EndedAt: '2026-09-16T10:30:00Z' })).toBe(2)
+    expect(getRequiredLineupSet({ ...match, status: 'live_set_2', set1EndedAt: '2026-09-16T10:30:00Z', set2StartedAt: '2026-09-16T10:35:00Z' })).toBeNull()
+  })
+
+  it('scopes the card drawer to the authenticated team and selected match', () => {
+    expect(getOwnMatchCards([
+      { id: 'own', teamId: 'team-red-id', matchId: 'match-id', cardId: 'card-a', state: 'available' },
+      { id: 'opponent', teamId: 'team-blue-id', matchId: 'match-id', cardId: 'card-b', state: 'available' },
+      { id: 'later', teamId: 'team-red-id', matchId: 'later-match', cardId: 'card-c', state: 'available' },
+    ], 'team-red-id', 'match-id')).toEqual([expect.objectContaining({ id: 'own' })])
   })
 })

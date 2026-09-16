@@ -173,6 +173,10 @@ export type Match = {
   lineups: MatchLineup[]
   currentKaosEventId?: string
   activeCardUsageIds: string[]
+  set1StartedAt?: string
+  set1EndedAt?: string
+  set2StartedAt?: string
+  set2EndedAt?: string
 }
 
 export type Round = {
@@ -181,11 +185,12 @@ export type Round = {
   name: string
   stage: RoundStage
   sequence: number
-  status: 'scheduled' | 'live_set_1' | 'waiting_for_global_dice' | 'kaos_active' | 'live_set_2' | 'completed'
+  status: 'scheduled' | 'live_set_1' | 'set_break' | 'waiting_for_global_dice' | 'kaos_active' | 'live_set_2' | 'completed'
   diceResult?: 1 | 2 | 3 | 4 | 5 | 6
   diceRuleId?: string
   diceStartedAt?: string
   diceEndsAt?: string
+  openedAt?: string
 }
 
 export type Court = {
@@ -230,6 +235,7 @@ export type Tournament = {
   updatedAt?: string | null
   phase?: TournamentPhase
   status?: 'draft' | 'configured' | 'live' | 'completed' | 'archived'
+  setControlMode?: 'centralized' | 'referee'
   groups: Group[]
   courts: Court[]
   rounds?: Round[]

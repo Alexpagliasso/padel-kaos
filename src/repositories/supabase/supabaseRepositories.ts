@@ -175,7 +175,7 @@ export async function loadSupabaseTournamentById(
   if (!tournamentId.trim()) throw new Error('Tournament ID is required')
   const { data: tournament, error } = await client
     .from('tournaments')
-    .select('id,name,phase,status,teams_count,teams_per_group,gold_qualified_count,silver_qualified_count,courts_count,allow_byes,theme_preset,theme_color,created_at,updated_at')
+    .select('id,name,phase,status,teams_count,teams_per_group,gold_qualified_count,silver_qualified_count,courts_count,allow_byes,theme_preset,theme_color,set_control_mode,created_at,updated_at')
     .eq('id', tournamentId)
     .single()
   if (error) throw new Error(`Unable to load tournament: ${error.message}`)
@@ -190,10 +190,10 @@ async function loadTournamentState(
   const [groups, courts, rounds, teams, players, matches, lineups, cards, teamCards, diceRules, matchEvents, globalEvents] = await Promise.all([
     selectTournamentRows<SupabaseGroupRow>(client, 'groups', 'id,tournament_id,name,sort_order,assigned_court_id', tournament.id, 'sort_order'),
     selectTournamentRows<SupabaseCourtRow>(client, 'courts', 'id,name,sort_order', tournament.id, 'sort_order'),
-    selectTournamentRows<SupabaseRoundRow>(client, 'rounds', 'id,tournament_id,name,stage,sequence,status,dice_result,dice_rule_id,dice_started_at,dice_ends_at', tournament.id, 'sequence'),
+    selectTournamentRows<SupabaseRoundRow>(client, 'rounds', 'id,tournament_id,name,stage,sequence,status,dice_result,dice_rule_id,dice_started_at,dice_ends_at,opened_at', tournament.id, 'sequence'),
     selectTournamentRows<SupabaseTeamRow>(client, 'teams', 'id,name,short_name,color,group_id,ranking', tournament.id, 'short_name'),
     selectPlayersRows(client, tournament.id),
-    selectTournamentRows<SupabaseMatchRow>(client, 'matches', 'id,round_id,group_id,court_id,team_a_id,team_b_id,status,current_set,games_a,games_b,sets_a,sets_b', tournament.id, 'created_at'),
+    selectTournamentRows<SupabaseMatchRow>(client, 'matches', 'id,round_id,group_id,court_id,team_a_id,team_b_id,status,current_set,games_a,games_b,sets_a,sets_b,set_1_started_at,set_1_ended_at,set_2_started_at,set_2_ended_at', tournament.id, 'created_at'),
     selectMatchScopedRows<SupabaseMatchLineupRow>(client, 'match_lineups', 'match_id,team_id,set_number,active_player_1_id,active_player_2_id,bench_player_id,confirmed_at', tournament.id),
     selectCardDefinitions(client, tournament.id),
     selectMatchScopedRows<SupabaseMatchCardRow>(client, 'match_cards', 'id,match_id,team_id,card_definition_id,status,used_in_set,activated_at,expires_at,remaining_games,stolen_from_team_id', tournament.id),

@@ -36,7 +36,7 @@ export function resolvePlayerRouteState(input: {
     return {
       type: 'error',
       title: 'Profilo squadra mancante',
-      message: 'This account is not associated with a team.',
+      message: 'Questo account non è associato a una squadra.',
     }
   }
 
@@ -45,7 +45,7 @@ export function resolvePlayerRouteState(input: {
     return {
       type: 'error',
       title: 'Squadra non trovata',
-      message: 'The team associated with this account is not configured in the tournament.',
+      message: 'La squadra associata a questo account non è configurata nel torneo.',
     }
   }
 
@@ -59,7 +59,13 @@ export function resolvePlayerRouteState(input: {
 
   const matches = input.tournament.matches
     .filter((item) => item.teamAId === playerTeam.id || item.teamBId === playerTeam.id)
-    .sort((a, b) => Number(a.status === 'completed') - Number(b.status === 'completed'))
+    .sort((a, b) => {
+      const completionOrder = Number(a.status === 'completed') - Number(b.status === 'completed')
+      if (completionOrder) return completionOrder
+      const aSequence = input.tournament.rounds?.find(round => round.id === a.roundId)?.sequence ?? Number.MAX_SAFE_INTEGER
+      const bSequence = input.tournament.rounds?.find(round => round.id === b.roundId)?.sequence ?? Number.MAX_SAFE_INTEGER
+      return aSequence - bSequence
+    })
   const match = matches[0]
   if (!match) {
     return {

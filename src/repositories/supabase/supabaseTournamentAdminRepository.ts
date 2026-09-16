@@ -11,7 +11,7 @@ import {
 } from './mappers/tournamentMapper'
 import { loadSupabaseTournamentById } from './supabaseRepositories'
 
-export const tournamentColumns = 'id,name,phase,status,teams_count,teams_per_group,gold_qualified_count,silver_qualified_count,courts_count,allow_byes,theme_preset,theme_color,created_at,updated_at'
+export const tournamentColumns = 'id,name,phase,status,teams_count,teams_per_group,gold_qualified_count,silver_qualified_count,courts_count,allow_byes,theme_preset,theme_color,set_control_mode,created_at,updated_at'
 
 type RepositoryDependencies = {
   client: SupabaseClient
