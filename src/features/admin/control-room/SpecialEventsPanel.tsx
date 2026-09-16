@@ -21,23 +21,23 @@ export function SpecialEventsPanel({
   return (
     <section className="rounded border border-white/10 bg-[#171717] p-5">
       <div className="mb-4 flex items-center gap-2">
-        <Trophy className="size-5 text-[#FFD000]" />
-        <h2 className="text-xl font-black">Special Events</h2>
+        <Trophy className="size-5 text-[var(--event-primary)]" />
+        <h2 className="text-xl font-black">Eventi speciali</h2>
       </div>
 
       <div className="rounded bg-black/45 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#FFD000]">POR TRES</p>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">POR TRES</p>
             <p className="mt-1 font-black uppercase">Status: {porTres?.status ?? 'inactive'}</p>
           </div>
           <span className="rounded bg-white/10 px-2 py-1 text-xs font-black uppercase text-white/60">
-            {porTres?.prize ?? (prizeDraft || 'No prize')}
+            {porTres?.prize ?? (prizeDraft || 'Nessun premio')}
           </span>
         </div>
         {winnerPlayer || winnerTeam ? (
           <p className="mt-3 text-sm font-bold text-white/70">
-            Winner: {winnerPlayer?.nickname ?? 'Player TBD'} · {winnerTeam?.name ?? 'Team TBD'}
+            Vincitore: {winnerPlayer?.nickname ?? 'Giocatore da definire'} · {winnerTeam?.name ?? 'Squadra da definire'}
           </p>
         ) : null}
         <input
@@ -48,7 +48,7 @@ export function SpecialEventsPanel({
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button
             type="button"
-            className="rounded bg-[#FFD000] px-3 py-3 font-black text-black disabled:opacity-50"
+            className="rounded bg-[var(--event-primary)] px-3 py-3 font-black text-black disabled:opacity-50"
             disabled={!canActivate}
             onClick={() => onActivatePorTres(prizeDraft)}
           >

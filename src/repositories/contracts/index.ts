@@ -1,12 +1,70 @@
-import type { DiceRule, TeamSide, Tournament } from '../../shared/types/domain'
+import type { CardDefinition, CardDurationType, DiceRule, TeamSide, Tournament } from '../../shared/types/domain'
+import type { PresetId } from '../../theme/tournamentPresets'
 import type { CreateMatchInput, CreateTeamInput, DemoEvent } from '../../demo/demoTypes'
 
 export type DataProvider = 'demo' | 'supabase'
 
 export type TournamentRepositoryContract = {
   data: Tournament
+  tournaments?: Tournament[]
+  selectedTournamentId?: string | null
+  selectTournament?: (tournamentId: string | null) => void
+  createTournament?: (name: string) => Promise<Tournament>
+  updateTournamentConfiguration?: (tournamentId: string, input: TournamentConfigurationInput) => Promise<Tournament>
   isLoading?: boolean
+  isCreating?: boolean
+  isSaving?: boolean
   error?: string
+}
+
+export type TournamentConfigurationInput = {
+  name: string
+  teamsCount: number
+  teamsPerGroup: number
+  goldQualifiedCount: number
+  silverQualifiedCount: number
+  courtsCount: number
+  allowByes: boolean
+  themePreset: PresetId
+  themeColor: string | null
+}
+
+export type TournamentAdminRepositoryContract = {
+  listTournaments: () => Promise<Tournament[]>
+  getTournament: (tournamentId: string) => Promise<Tournament>
+  createTournament: (name: string) => Promise<Tournament>
+  updateTournamentConfiguration: (tournamentId: string, input: TournamentConfigurationInput) => Promise<Tournament>
+  deleteTournamentIfSafe: (tournamentId: string) => Promise<void>
+}
+
+export type CardDefinitionInput = {
+  name: string
+  slug: string
+  description: string
+  longDescription: string
+  imageUrl: string | null
+  effectType: string
+  targetType: NonNullable<CardDefinition['targetType']>
+  durationType: CardDurationType
+  durationValue: number | null
+  canBeStolen: boolean
+  enabled: boolean
+}
+
+export type TournamentCard = {
+  definition: CardDefinition
+  activeInTournament: boolean
+}
+
+export type CardAdminRepositoryContract = {
+  listCardDefinitions: () => Promise<CardDefinition[]>
+  createCardDefinition: (input: CardDefinitionInput) => Promise<CardDefinition>
+  updateCardDefinition: (cardId: string, input: CardDefinitionInput) => Promise<CardDefinition>
+  archiveCardDefinition: (cardId: string) => Promise<CardDefinition>
+  listTournamentCards: (tournamentId: string) => Promise<TournamentCard[]>
+  setTournamentCardEnabled: (tournamentId: string, cardId: string, enabled: boolean) => Promise<void>
+  uploadCardImage: (cardId: string, file: File) => Promise<string>
+  removeCardImage: (cardId: string, imageUrl: string) => Promise<void>
 }
 
 export type MatchRepositoryContract = {
@@ -37,4 +95,6 @@ export type EventRepositoryContract = {
 export type TeamRepositoryContract = {
   createTeam: (input: CreateTeamInput & { tournamentId?: string }) => Promise<string> | string
   updateTeam: (teamId: string, input: CreateTeamInput & { tournamentId?: string }) => Promise<string> | string
+  setTeamRanking?: (tournamentId: string, teamId: string, ranking: number | null) => Promise<void> | void
+  assignRandomTeamRankings?: (tournamentId: string) => Promise<void> | void
 }

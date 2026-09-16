@@ -20,13 +20,13 @@ export function RecoveryPanel({
   onResetTournament,
 }: RecoveryPanelProps) {
   return (
-    <section aria-label="Admin Recovery" className="space-y-4">
+    <section aria-label="Ripristino Admin" className="space-y-4">
       <div className="flex flex-wrap gap-2">
         <button type="button" className="rounded border border-white/10 px-3 py-2 font-black" onClick={onExportBackup}>
           Export Backup
         </button>
         <button type="button" className="rounded border border-white/10 px-3 py-2 font-black" onClick={onDownloadBackup}>
-          Download JSON
+          Scarica JSON
         </button>
         <button type="button" className="rounded border border-white/10 px-3 py-2 font-black" onClick={onImportBackup}>
           Import Backup
@@ -38,7 +38,7 @@ export function RecoveryPanel({
           Restore
         </button>
         <button type="button" className="rounded border border-red-400/40 px-3 py-2 font-black text-red-200 disabled:opacity-40" disabled={!resetGate.allowed} onClick={onResetTournament}>
-          Reset Tournament
+          Reimposta torneo
         </button>
       </div>
       <p className="text-xs font-black uppercase text-white/50">{RESET_CONFIRMATION_PHRASE}</p>

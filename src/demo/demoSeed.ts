@@ -200,6 +200,7 @@ function createTeam(
     shortName,
     color,
     groupId: 'demo-group-a',
+    ranking: null,
     players: playerSeeds.map(([playerName, gender], index) => ({
       id: `${id}-p${index + 1}`,
       teamId: id,

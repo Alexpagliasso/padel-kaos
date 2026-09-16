@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+:root {
+  --event-primary: #ff9955;
+  --event-contrast: #090c10;
+  --event-soft: rgb(255 153 85 / 12%);
+  --event-gradient: linear-gradient(125deg, #34251f, #131920 75%);
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -14,4 +21,35 @@ body {
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Compatibility layer for workflows being migrated from Tailwind to MUI. */
+:where(.admin-shell, .role-mobile, .role-display) :is(section, article, header, div).rounded {
+  border-radius: 20px;
+}
+:where(.admin-shell, .role-mobile, .role-display) [class*="bg-[#171717]"] {
+  background-color: #131920;
+}
+:where(.admin-shell, .role-mobile, .role-display) :is(button, select, input) {
+  min-height: 48px;
+  border-radius: 12px;
+}
+:where(.admin-shell, .role-mobile) main { min-width: 0; }
+:where(.admin-shell, .role-mobile) :is(button, a, input, select):focus-visible {
+  outline: 3px solid var(--event-primary);
+  outline-offset: 3px;
+}
+[id] { scroll-margin-top: 24px; }
+.role-mobile nav a { min-height: 48px; }
+.role-mobile nav { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+.role-display main { background: transparent; }
+.role-display h1 { font-size: clamp(2rem, 4vw, 6rem); line-height: 1.05; overflow-wrap: anywhere; }
+.role-display .scoreboard { container-type: inline-size; }
+.role-display article .scoreboard [aria-label$=" points"] { font-size: clamp(3rem, 20cqw, 8rem); }
+.role-display article .scoreboard p { font-size: clamp(.9rem, 3cqw, 1.7rem); }
+.role-display article { min-width: 0; }
+.role-display .display-lineup :is(p, span) { font-size: clamp(1rem, 1.5vw, 2rem); }
+.role-display .display-lineup svg { width: 1.5em; height: 1.5em; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }

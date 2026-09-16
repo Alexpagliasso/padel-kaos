@@ -50,6 +50,9 @@ export type DemoRepositoryResult<T> = {
 }
 
 export type DemoState = {
+  savedWorkspaces?: Record<string, import('../features/admin/workspace/workspaceStore').WorkspaceEntry>
+  savedEvents?: Record<string, DemoEvent[]>
+  savedSelections?: Record<string, { selectedTeamId: string; selectedMatchId: string; selectedCourtId: string; porTresPrizeDraft: string }>
   tournament: Tournament
   events: DemoEvent[]
   selectedTeamId: string
@@ -70,7 +73,10 @@ export type DemoActions = {
   setPorTresPrizeDraft: (prize: string) => void
   createTeam: (input: CreateTeamInput) => string
   updateTeam: (teamId: string, input: CreateTeamInput) => string
+  setTeamRanking: (tournamentId: string, teamId: string, ranking: number | null) => void
+  assignRandomTeamRankings: (tournamentId: string) => void
   createMatch: (input: CreateMatchInput) => void
+  confirmLineup: (matchId: string, teamId: string, setNumber: 1 | 2, playerIds: [string, string]) => void
   assignCard: (teamId: string, cardId: string, matchId?: string) => void
   drawMatchCards: (matchId: string) => void
   startMatch: (matchId: string) => void

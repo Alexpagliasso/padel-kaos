@@ -5,6 +5,7 @@ import {
   getAvailablePairs,
   getRemainingPair,
   isPairAlreadyUsed,
+  isSamePair,
   normalizePair,
   validateMatchLineup,
 } from './rulesEngine'
@@ -53,6 +54,15 @@ describe('match lineup pair rules', () => {
     { activePlayerIds: ['A', 'B'] as [string, string] },
     { activePlayerIds: ['A', 'C'] as [string, string] },
   ]
+
+  it('genera esattamente AB, AC e BC', () => {
+    expect(getAvailablePairs(roster, [])).toEqual([['A', 'B'], ['A', 'C'], ['B', 'C']])
+  })
+
+  it('confronta le coppie senza considerare l’ordine', () => {
+    expect(isSamePair(['A', 'B'], ['B', 'A'])).toBe(true)
+    expect(isSamePair(['A', 'B'], ['A', 'C'])).toBe(false)
+  })
 
   it.each([
     ['A', 'B', 'B', 'A'],

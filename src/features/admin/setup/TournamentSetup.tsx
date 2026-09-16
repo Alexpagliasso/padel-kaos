@@ -1,6 +1,9 @@
+import { Box, Button, MenuItem, TextField } from '@mui/material'
+import type { TeamRepositoryContract } from '../../../repositories/contracts'
+import { PageShell } from '../../../shared/components/Foundation'
 import { useEffect, useMemo, useState } from 'react'
 import { CalendarPlus, Copy, CreditCard, Download, Edit3, KeyRound, Layers3, MapPinned, Network, Trophy } from 'lucide-react'
-import { useTournament } from '../../tournament/useTournament'
+import { useAdminWorkspace } from '../workspace/useAdminWorkspace'
 import { dataProvider, isSupabaseProvider } from '../../../repositories'
 import { useTeamRepository } from '../../../repositories/teamRepository'
 import { AdminPageState } from '../dashboard/AdminDashboard'
@@ -35,30 +38,36 @@ import {
   validateTeamRosterDraft,
   type TeamRosterDraft,
 } from './teamRosterFormState'
+import { TeamRankingActions, TeamRankingEditor } from './TeamRankingControls'
 
 const tabs = ['TOURNAMENT', 'TEAMS', 'GROUPS', 'COURTS', 'ROUNDS / MATCHES', 'CARDS'] as const
 type SetupTab = (typeof tabs)[number]
 
-export function TournamentSetup() {
-  const { data: tournament, error, isLoading } = useTournament()
+export function TournamentSetup({ initialTab }: { initialTab?: SetupTab }) {
+  const { data: tournament, error, isLoading } = useAdminWorkspace()
 
-  if (isLoading) return <AdminPageState title="Loading setup" />
-  if (error) return <AdminPageState title="Unable to load setup" detail={error} tone="error" />
+  if (isLoading) return <AdminPageState title="Caricamento configurazione" />
+  if (error) return <AdminPageState title="Impossibile caricare la configurazione" detail={error} tone="error" />
 
-  return <TournamentSetupContent tournament={tournament} />
+  return <TournamentSetupContent tournament={tournament} initialTab={initialTab} />
 }
 
 export function TournamentSetupContent({
   tournament,
   initialTab = 'TOURNAMENT',
   enableTeamAccess = isSupabaseProvider(),
+  embedded = false,
+  repositoryOverride,
 }: {
   tournament: Tournament
   initialTab?: SetupTab
   enableTeamAccess?: boolean
+  embedded?: boolean
+  repositoryOverride?: TeamRepositoryContract
 }) {
   const [tab, setTab] = useState<SetupTab>(initialTab)
-  const teamRepository = useTeamRepository()
+  const defaultTeamRepository = useTeamRepository()
+  const teamRepository = repositoryOverride ?? defaultTeamRepository
   const [draft, setDraft] = useState<TeamRosterDraft>(() => createEmptyTeamRosterDraft())
   const [accounts, setAccounts] = useState<ExistingProvisionedAccount[]>([])
   const [accountsLoading, setAccountsLoading] = useState(enableTeamAccess)
@@ -129,7 +138,7 @@ export function TournamentSetupContent({
       const input = { ...toCreateTeamInput(draft), tournamentId: tournament.id }
       if (draft.teamId) {
         await teamRepository.updateTeam(draft.teamId, input)
-        setFormMessage('Team roster updated.')
+        setFormMessage('Squadra aggiornata.')
       } else {
         const teamId = await teamRepository.createTeam(input)
         if (enableTeamAccess) {
@@ -140,24 +149,24 @@ export function TournamentSetupContent({
               username: generatedDraftUsername,
             })
             registerCreatedCredential(credential, input.name)
-            setFormMessage('Team created. Login created. Save these credentials now.')
+            setFormMessage('Squadra e accesso creati. Salva subito le credenziali.')
           } catch (caughtError) {
             setPendingTeamLogin({
               teamId,
               teamName: input.name,
               username: generatedDraftUsername,
             })
-            setFormError(`Team created, login creation failed. ${getProvisioningErrorMessage(caughtError)}`)
+            setFormError(`Squadra creata, creazione accesso non riuscita. ${getProvisioningErrorMessage(caughtError)}`)
             return
           }
         } else {
-          setFormMessage('Team roster created.')
+          setFormMessage('Squadra creata.')
         }
       }
       setDraft(createEmptyTeamRosterDraft())
       await refreshAccounts()
     } catch (caughtError) {
-      setFormError(`Team DB creation failed. ${caughtError instanceof Error ? caughtError.message : 'Unable to save team roster.'}`)
+      setFormError(`Creazione squadra nel database non riuscita. ${caughtError instanceof Error ? caughtError.message : 'Impossibile salvare la squadra.'}`)
     } finally {
       setSavingTeam(false)
     }
@@ -178,7 +187,7 @@ export function TournamentSetupContent({
       registerCreatedCredential(credential, pendingTeamLogin.teamName)
       setPendingTeamLogin(null)
       setDraft(createEmptyTeamRosterDraft())
-      setFormMessage('Login created. Save these credentials now.')
+      setFormMessage('Accesso creato. Salva subito le credenziali.')
       await refreshAccounts()
     } catch (caughtError) {
       setFormError(getProvisioningErrorMessage(caughtError))
@@ -248,7 +257,7 @@ export function TournamentSetupContent({
         teams: buildBulkTeamProvisionInputs(missingAccountTeams, usedTeamUsernames),
       })
       credentials.forEach((credential) => registerCreatedCredential(credential, credential.teamName ?? credential.username))
-      setFormMessage(`${credentials.length} team logins created. Save these credentials now.`)
+      setFormMessage(`${credentials.length} accessi squadra creati. Salva subito le credenziali.`)
       await refreshAccounts()
     } catch (caughtError) {
       setFormError(getProvisioningErrorMessage(caughtError))
@@ -273,9 +282,9 @@ export function TournamentSetupContent({
   }
 
   return (
-    <main className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-6">
-      <header>
-        <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FFD000]">Tournament Setup</p>
+    <PageShell embedded={embedded}><div className=" grid w-full max-w-7xl gap-5 ">
+      {!embedded && <><header>
+        <p className="text-sm font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">Configurazione torneo</p>
         <h1 className="mt-2 text-3xl font-black">{tournament.name}</h1>
       </header>
 
@@ -284,16 +293,16 @@ export function TournamentSetupContent({
           <button
             key={item}
             type="button"
-            className={`shrink-0 rounded px-3 py-2 text-sm font-black ${tab === item ? 'bg-[#FFD000] text-black' : 'bg-white/10 text-white/70'}`}
+            className={`shrink-0 rounded px-3 py-2 text-sm font-black ${tab === item ? 'bg-[var(--event-primary)] text-black' : 'bg-white/10 text-white/70'}`}
             onClick={() => setTab(item)}
           >
             {item}
           </button>
         ))}
-      </nav>
+      </nav></>}
 
       {tab === 'TOURNAMENT' ? (
-        <SetupPanel icon={Trophy} title="Tournament">
+        <SetupPanel icon={Trophy} title="Torneo">
           <InfoGrid rows={[
             ['Name', tournament.name],
             ['Status', tournament.status ?? 'unknown'],
@@ -304,7 +313,8 @@ export function TournamentSetupContent({
       ) : null}
 
       {tab === 'TEAMS' ? (
-        <SetupPanel icon={Layers3} title="Teams">
+        <SetupPanel icon={Layers3} title="Squadre">
+          <TeamRankingActions tournament={tournament} repository={teamRepository} onMessage={setFormMessage} onError={setFormError} />
           <TeamRosterForm
             draft={draft}
             disabled={!rosterEditable || savingTeam}
@@ -332,11 +342,11 @@ export function TournamentSetupContent({
             />
           ) : null}
           {!rosterEditable ? (
-            <p className="mb-4 rounded border border-[#FFD000]/30 bg-[#FFD000]/10 p-3 text-sm font-bold text-[#FFD000]">
+            <p className="mb-4 rounded border border-[var(--event-primary)]/30 bg-[var(--event-primary)]/10 p-3 text-sm font-bold text-[var(--event-primary)]">
               Roster is read-only when tournament status is {tournament.status}.
             </p>
           ) : null}
-          {tournament.teams.length === 0 ? <EmptySetupState label="No teams configured" /> : (
+          {tournament.teams.length === 0 ? <EmptySetupState label="Nessuna squadra configurata" /> : (
             <div className="grid gap-3 md:grid-cols-2">
               {tournament.teams.map((team) => (
                 <article key={team.id} className="rounded border border-white/10 bg-white/[0.04] p-4">
@@ -351,8 +361,9 @@ export function TournamentSetupContent({
                   </div>
                   <div className="mt-3 grid gap-1 text-sm text-white/60">
                     {formatTeamRoster(team).map((playerName) => <p key={playerName}>{playerName}</p>)}
-                    {team.players.length === 0 ? <p>No players configured</p> : null}
+                    {team.players.length === 0 ? <p>Nessun giocatore configurato</p> : null}
                   </div>
+                  <TeamRankingEditor key={`${team.id}-${team.ranking ?? 'none'}`} tournament={tournament} team={team} repository={teamRepository} onMessage={setFormMessage} onError={setFormError} />
                   <button
                     type="button"
                     disabled={!rosterEditable}
@@ -378,7 +389,7 @@ export function TournamentSetupContent({
                         try {
                           const credential = await provisionTeamLogin({ teamId: team.id, teamName: team.name, username })
                           registerCreatedCredential(credential, team.name)
-                          setFormMessage('Login created. Save these credentials now.')
+                          setFormMessage('Accesso creato. Salva subito le credenziali.')
                           await refreshAccounts()
                         } catch (caughtError) {
                           setFormError(getProvisioningErrorMessage(caughtError))
@@ -396,36 +407,36 @@ export function TournamentSetupContent({
       ) : null}
 
       {tab === 'GROUPS' ? (
-        <SetupPanel icon={Network} title="Groups">
-          <SimpleList items={tournament.groups.map((group) => group.name)} emptyLabel="No groups configured" />
+        <SetupPanel icon={Network} title="Gironi">
+          <SimpleList items={tournament.groups.map((group) => group.name)} emptyLabel="Nessun girone configurato" />
         </SetupPanel>
       ) : null}
 
       {tab === 'COURTS' ? (
         <SetupPanel icon={MapPinned} title="Courts">
-          <SimpleList items={tournament.courts.map((court) => court.name)} emptyLabel="No courts configured" />
+          <SimpleList items={tournament.courts.map((court) => court.name)} emptyLabel="Nessun campo configurato" />
         </SetupPanel>
       ) : null}
 
       {tab === 'ROUNDS / MATCHES' ? (
-        <SetupPanel icon={CalendarPlus} title="Rounds / Matches">
+        <SetupPanel icon={CalendarPlus} title="Turni / Partite">
           <div className="grid gap-4 lg:grid-cols-2">
-            <SimpleList items={(tournament.rounds ?? []).map((round) => `${round.name} · ${round.status}`)} emptyLabel="No rounds configured" />
+            <SimpleList items={(tournament.rounds ?? []).map((round) => `${round.name} · ${round.status}`)} emptyLabel="Nessun turno configurato" />
             <SimpleList items={tournament.matches.map((match) => {
               const teamA = tournament.teams.find((team) => team.id === match.teamAId)
               const teamB = tournament.teams.find((team) => team.id === match.teamBId)
               return `${teamA?.name ?? 'TBD'} vs ${teamB?.name ?? 'TBD'} · ${match.status}`
-            })} emptyLabel="No matches configured" />
+            })} emptyLabel="Nessuna partita configurata" />
           </div>
         </SetupPanel>
       ) : null}
 
       {tab === 'CARDS' ? (
-        <SetupPanel icon={CreditCard} title="Cards">
-          <SimpleList items={tournament.cards.map((card) => `${card.name} · ${card.durationType}`)} emptyLabel="No cards configured" />
+        <SetupPanel icon={CreditCard} title="Carte">
+          <SimpleList items={tournament.cards.map((card) => `${card.name} · ${card.durationType}`)} emptyLabel="Nessuna carta configurata" />
         </SetupPanel>
       ) : null}
-    </main>
+    </div></PageShell>
   )
 }
 
@@ -463,107 +474,107 @@ function TeamRosterForm({
   onRetryLogin: () => void
 }) {
   return (
-    <form
+    <Box component="form"
       className="mb-5 grid gap-4 rounded border border-white/10 bg-black/35 p-4"
       onSubmit={(event) => {
         event.preventDefault()
         if (!disabled) onSave()
       }}
     >
-      <label className="grid gap-1 text-sm font-bold text-white/65">
-        Team name
-        <input
+      <Box>
+        <TextField
           className="rounded bg-black px-3 py-3 text-white"
           disabled={disabled}
+          label="Nome squadra"
           value={draft.teamName}
           onChange={(event) => onTeamNameChange(event.target.value)}
         />
-      </label>
+      </Box>
       <div className="grid gap-3 lg:grid-cols-3">
         {draft.players.map((player, index) => (
           <fieldset key={player.id ?? index} className="grid gap-2 rounded border border-white/10 p-3">
-            <legend className="px-1 text-sm font-black uppercase text-[#FFD000]">Player {index + 1}</legend>
-            <input
+            <legend className="px-1 text-sm font-black uppercase text-[var(--event-primary)]">Giocatore {index + 1}</legend>
+            <TextField
               className="rounded bg-black px-3 py-3 text-white"
               disabled={disabled}
-              placeholder="First name"
+              label="First name"
               value={player.firstName}
               onChange={(event) => updateDraftPlayer(draft, index, { firstName: event.target.value }, onDraftChange)}
             />
-            <input
+            <TextField
               className="rounded bg-black px-3 py-3 text-white"
               disabled={disabled}
-              placeholder="Last name"
+              label="Last name"
               value={player.lastName}
               onChange={(event) => updateDraftPlayer(draft, index, { lastName: event.target.value }, onDraftChange)}
             />
-            <select
+            <TextField select label="Gender"
               className="rounded bg-black px-3 py-3 text-white"
               disabled={disabled}
               value={player.gender}
               onChange={(event) => updateDraftPlayer(draft, index, { gender: event.target.value as TeamRosterDraft['players'][number]['gender'] }, onDraftChange)}
             >
-              <option value="">Gender</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-            </select>
+              <MenuItem value="">Gender</MenuItem>
+              <MenuItem value="male">Male</MenuItem>
+              <MenuItem value="female">Female</MenuItem>
+            </TextField>
           </fieldset>
         ))}
       </div>
       {!isEditing && isSupabase ? (
-        <div className="grid gap-3 rounded border border-[#FFD000]/25 bg-[#FFD000]/10 p-4">
+        <div className="grid gap-3 rounded border border-[var(--event-primary)]/25 bg-[var(--event-primary)]/10 p-4">
           <div className="flex items-center gap-2">
-            <KeyRound className="size-4 text-[#FFD000]" />
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FFD000]">Team access</p>
+            <KeyRound className="size-4 text-[var(--event-primary)]" />
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">Accesso squadra</p>
           </div>
           <div className="rounded bg-black/70 p-3">
-            <p className="text-xs font-black uppercase text-white/35">Username</p>
+            <p className="text-xs font-black uppercase text-white/35">Nome utente</p>
             <p className="mt-1 font-mono text-white">{generatedUsername || 'Generated from team name'}</p>
           </div>
-          <p className="text-sm font-bold text-white/65">Password is generated automatically server-side.</p>
+          <p className="text-sm font-bold text-white/65">La password viene generata automaticamente dal server.</p>
         </div>
       ) : null}
       {error ? <p className="rounded border border-red-400/40 bg-red-950/20 p-3 text-sm font-bold text-red-100">{error}</p> : null}
       {message ? <p className="rounded border border-emerald-400/40 bg-emerald-950/20 p-3 text-sm font-bold text-emerald-100">{message}</p> : null}
-      {copyMessage ? <p className="text-sm font-bold text-[#FFD000]">{copyMessage}</p> : null}
+      {copyMessage ? <p className="text-sm font-bold text-[var(--event-primary)]">{copyMessage}</p> : null}
       {pendingTeamLogin ? (
         <div className="grid gap-3 rounded border border-red-400/40 bg-red-950/20 p-4">
-          <p className="font-black text-red-100">Team created, login creation failed</p>
+          <p className="font-black text-red-100">Squadra creata, creazione accesso non riuscita</p>
           <p className="text-sm font-bold text-red-100/70">{pendingTeamLogin.teamName} · {pendingTeamLogin.username}</p>
-          <button type="button" disabled={disabled} className="w-fit rounded bg-white px-3 py-2 text-sm font-black text-black disabled:opacity-50" onClick={onRetryLogin}>
-            Retry Create Login
-          </button>
+          <Button type="button" disabled={disabled} className="w-fit rounded bg-white px-3 py-2 text-sm font-black text-black disabled:opacity-50" onClick={onRetryLogin}>
+            Riprova creazione accesso
+          </Button>
         </div>
       ) : null}
       {latestCredential ? (
-        <div className="grid gap-3 rounded border border-[#FFD000]/40 bg-black p-4">
+        <div className="grid gap-3 rounded border border-[var(--event-primary)]/40 bg-black p-4">
           <div>
-            <p className="font-black uppercase text-[#FFD000]">Team created</p>
-            <p className="text-xs font-bold text-white/45">Save these credentials now. The password cannot be recovered later.</p>
+            <p className="font-black uppercase text-[var(--event-primary)]">Squadra creata</p>
+            <p className="text-xs font-bold text-white/45">Salva subito queste credenziali. La password non potrà essere recuperata.</p>
           </div>
           <p className="font-black">{latestCredential.teamName}</p>
-          <p className="text-xs uppercase text-white/35">Username</p>
+          <p className="text-xs uppercase text-white/35">Nome utente</p>
           <p className="font-mono">{latestCredential.username}</p>
           <p className="text-xs uppercase text-white/35">Temporary password</p>
           <p className="font-mono">{latestCredential.temporaryPassword ?? 'NOT RETURNED'}</p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="inline-flex items-center gap-2 rounded bg-white px-3 py-2 text-xs font-black text-black" onClick={() => onCopy('Username', latestCredential.username)}>
+            <Button type="button" className="inline-flex items-center gap-2 rounded bg-white px-3 py-2 text-xs font-black text-black" onClick={() => onCopy('Nome utente', latestCredential.username)}>
               <Copy className="size-3" />
-              Copy Username
-            </button>
+              Copia nome utente
+            </Button>
             {latestCredential.temporaryPassword ? (
-              <button type="button" className="inline-flex items-center gap-2 rounded bg-white px-3 py-2 text-xs font-black text-black" onClick={() => onCopy('Password', latestCredential.temporaryPassword ?? '')}>
+              <Button type="button" className="inline-flex items-center gap-2 rounded bg-white px-3 py-2 text-xs font-black text-black" onClick={() => onCopy('Password', latestCredential.temporaryPassword ?? '')}>
                 <Copy className="size-3" />
-                Copy Password
-              </button>
+                Copia password
+              </Button>
             ) : null}
           </div>
         </div>
       ) : null}
-      <button type="submit" disabled={disabled} className="rounded bg-[#FFD000] px-4 py-3 font-black text-black disabled:cursor-not-allowed disabled:opacity-45">
-        {isEditing ? 'Save Team' : isSupabase ? 'Create Team + Login' : 'Create Team'}
-      </button>
-    </form>
+      <Button type="submit" disabled={disabled} className="rounded bg-[var(--event-primary)] px-4 py-3 font-black text-black disabled:cursor-not-allowed disabled:opacity-45">
+        {isEditing ? 'Salva squadra' : isSupabase ? 'Crea squadra e accesso' : 'Crea squadra'}
+      </Button>
+    </Box>
   )
 }
 
@@ -595,20 +606,20 @@ function TeamCredentialsToolbar({
   onDownload: () => void
 }) {
   return (
-    <div className="mb-5 grid gap-3 rounded border border-[#FFD000]/35 bg-[#FFD000]/10 p-4">
+    <div className="mb-5 grid gap-3 rounded border border-[var(--event-primary)]/35 bg-[var(--event-primary)]/10 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FFD000]">Team credentials</p>
+          <p className="text-sm font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">Credenziali squadra</p>
           <p className="mt-1 text-sm font-bold text-white/60">{credentialsCount} credentials ready</p>
         </div>
-        <button type="button" disabled={credentialsCount === 0} className="inline-flex items-center gap-2 rounded bg-[#FFD000] px-4 py-3 font-black text-black disabled:cursor-not-allowed disabled:opacity-45" onClick={onDownload}>
+        <button type="button" disabled={credentialsCount === 0} className="inline-flex items-center gap-2 rounded bg-[var(--event-primary)] px-4 py-3 font-black text-black disabled:cursor-not-allowed disabled:opacity-45" onClick={onDownload}>
           <Download className="size-4" />
-          Download All Team Credentials
+          Scarica tutte le credenziali squadre
         </button>
       </div>
       <button type="button" disabled={disabled || missingTeamsCount === 0} className="inline-flex w-fit items-center gap-2 rounded bg-white px-3 py-2 text-sm font-black text-black disabled:cursor-not-allowed disabled:opacity-45" onClick={onBulkCreate}>
         <KeyRound className="size-4" />
-        Generate Team Accounts
+        Genera account squadre
       </button>
       <p className="text-xs font-bold text-white/45">{missingTeamsCount} teams without accounts.</p>
     </div>
@@ -653,19 +664,19 @@ function TeamAccountStatus({
     return (
       <div className="mt-4 rounded border border-emerald-400/30 bg-emerald-950/20 p-3 text-sm">
         <p className="font-black text-emerald-100">{state.label}</p>
-        <p className="text-white/60">Username: {display.username}</p>
+        <p className="text-white/60">Nome utente: {display.username}</p>
         <p className="text-white/60">Account: active</p>
-        <p className="font-black text-white/65">Password: not stored</p>
+        <p className="font-black text-white/65">Password: non salvata</p>
       </div>
     )
   }
 
   return (
-    <div className="mt-4 rounded border border-[#FFD000]/30 bg-[#FFD000]/10 p-3 text-sm">
-      <p className="font-black text-[#FFD000]">{state.label}</p>
+    <div className="mt-4 rounded border border-[var(--event-primary)]/30 bg-[var(--event-primary)]/10 p-3 text-sm">
+      <p className="font-black text-[var(--event-primary)]">{state.label}</p>
       <button type="button" disabled={disabled} className="mt-2 inline-flex items-center gap-2 rounded bg-white px-3 py-2 text-sm font-black text-black disabled:opacity-50" onClick={() => void onCreateLogin()}>
         <KeyRound className="size-4" />
-        Create Login
+        Crea accesso
       </button>
     </div>
   )
@@ -687,7 +698,7 @@ function SetupPanel({ icon: Icon, title, children }: { icon: typeof Layers3; tit
   return (
     <section className="rounded border border-white/10 bg-[#171717] p-5">
       <div className="mb-4 flex items-center gap-2">
-        <Icon className="size-5 text-[#FFD000]" />
+        <Icon className="size-5 text-[var(--event-primary)]" />
         <h2 className="text-xl font-black">{title}</h2>
       </div>
       {children}

@@ -20,6 +20,7 @@ const team: Team = {
   shortName: 'RED',
   color: '#FF405C',
   groupId: 'group-a',
+  ranking: null,
   players: [
     { id: 'p1', teamId: 'team-red', firstName: 'Mario', lastName: 'Rossi', name: 'Mario Rossi', nickname: 'Mario', gender: 'man', accessToken: '' },
     { id: 'p2', teamId: 'team-red', firstName: 'Giulia', lastName: 'Ferri', name: 'Giulia Ferri', nickname: 'Giulia', gender: 'woman', accessToken: '' },

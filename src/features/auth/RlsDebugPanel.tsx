@@ -8,7 +8,8 @@ export function RlsDebugPanel({ tournament }: { tournament: Tournament }) {
 
   const readableMatches = tournament.matches.filter((match) => {
     if (profile.role === 'admin' || profile.role === 'main_display') return true
-    if (profile.role === 'referee' || profile.role === 'court_display') return match.courtId === profile.courtId
+    if (profile.role === 'referee') return false // Multi-court access is authoritative on the server.
+    if (profile.role === 'court_display') return match.courtId === profile.courtId
     if (profile.role === 'team') return profile.teamId === match.teamAId || profile.teamId === match.teamBId
     return false
   })
@@ -21,19 +22,19 @@ export function RlsDebugPanel({ tournament }: { tournament: Tournament }) {
   const canUpdateMatch = profile.role === 'admin' || profile.role === 'referee'
 
   return (
-    <section className="rounded border border-[#FFD000]/30 bg-[#FFD000]/10 p-5">
+    <section className="rounded border border-[var(--event-primary)]/30 bg-[var(--event-primary)]/10 p-5">
       <div className="mb-4 flex items-center gap-2">
-        <ShieldCheck className="size-5 text-[#FFD000]" />
+        <ShieldCheck className="size-5 text-[var(--event-primary)]" />
         <h2 className="text-lg font-black">RLS Debug</h2>
       </div>
       <div className="grid gap-2 text-sm md:grid-cols-2">
-        <DebugLine label="Current role" value={profile.role} />
-        <DebugLine label="Team" value={profile.teamId ?? 'none'} />
-        <DebugLine label="Court" value={profile.courtId ?? 'none'} />
-        <DebugLine label="Readable matches" value={String(readableMatches.length)} />
-        <DebugLine label="Own visible match_cards" value={String(ownVisibleCards)} />
-        <DebugLine label="Opponent available match_cards visible" value={String(opponentVisibleAvailableCards)} />
-        <DebugLine label="Update match dry check" value={canUpdateMatch ? 'manual test required' : 'expected denied'} />
+        <DebugLine label="Ruolo attuale" value={profile.role} />
+        <DebugLine label="Squadra" value={profile.teamId ?? 'nessuno'} />
+        <DebugLine label={profile.role === 'referee' ? 'Campo primario legacy' : 'Campo'} value={profile.courtId ?? 'nessuno'} />
+        <DebugLine label="Partite leggibili" value={profile.role === 'referee' ? 'verificate dal server per assegnazione' : String(readableMatches.length)} />
+        <DebugLine label="Carte visibili della squadra" value={String(ownVisibleCards)} />
+        <DebugLine label="Carte disponibili degli avversari visibili" value={String(opponentVisibleAvailableCards)} />
+        <DebugLine label="Verifica modifica partita" value={canUpdateMatch ? 'test manuale richiesto' : 'rifiuto previsto'} />
       </div>
     </section>
   )

@@ -12,8 +12,8 @@ export function GlobalEventOverlay({ event, fullscreen = false }: { event?: Glob
           exit={{ opacity: 0 }}
           className={
             fullscreen
-              ? 'fixed inset-0 z-50 grid place-items-center bg-[#FFD000] p-6 text-black'
-              : 'rounded border border-[#FFD000]/40 bg-[#FFD000]/10 p-4'
+              ? 'fixed inset-0 z-50 grid place-items-center bg-[var(--event-primary)] p-6 text-black'
+              : 'rounded border border-[var(--event-primary)]/40 bg-[var(--event-primary)]/10 p-4'
           }
         >
           <div className="max-w-4xl text-center">

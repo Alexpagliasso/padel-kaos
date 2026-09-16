@@ -16,15 +16,20 @@ describe('AccessManagementPanel helpers', () => {
   it('renders the access management creation and bulk controls', () => {
     const html = renderToStaticMarkup(createElement(AccessManagementPanel, { tournament: createDemoTournament() }))
 
-    expect(html).toContain('Create single account')
+    expect(html).toContain('Crea account singolo')
     expect(html).toContain('Role')
-    expect(html).toContain('Username')
-    expect(html).toContain('Password mode')
+    expect(html).toContain('Nome utente')
+    expect(html).toContain('Modalità password')
     expect(html).toContain('Auto generate')
     expect(html).toContain('Manual password')
     expect(html).toContain('Assignment')
     expect(html).toContain('Bulk team provisioning')
-    expect(html).toContain('Generate Team Accounts')
+    expect(html).toContain('Genera account squadre')
+    expect(html).toContain('Arbitri')
+    expect(html).toContain('2 campi')
+    expect(html).toContain('0 arbitri configurati')
+    expect(html).toContain('2 arbitri mancanti')
+    expect(html).toContain('Genera arbitri mancanti')
   })
 
   it('renders manual password fields when manual mode is selected', () => {
@@ -34,7 +39,7 @@ describe('AccessManagementPanel helpers', () => {
     }))
 
     expect(html).toContain('Password')
-    expect(html).toContain('Confirm password')
+    expect(html).toContain('Conferma password')
   })
 
   it('builds provisioning presets for the end-to-end RLS test accounts', () => {
@@ -53,14 +58,14 @@ describe('AccessManagementPanel helpers', () => {
   })
 
   it('maps unavailable edge function errors to a user-facing message', () => {
-    expect(getProvisioningErrorMessage(new Error('FunctionsHttpError: Edge Function returned a non-2xx status code'))).toBe('Provisioning service unavailable')
-    expect(getProvisioningErrorMessage(new Error('duplicate key value violates unique constraint'))).toBe('Username or profile already exists')
+    expect(getProvisioningErrorMessage(new Error('FunctionsHttpError: Edge Function returned a non-2xx status code'))).toBe('Servizio di creazione credenziali non disponibile.')
+    expect(getProvisioningErrorMessage(new Error('duplicate key value violates unique constraint'))).toBe('Il nome utente o il profilo esiste già.')
   })
 
   it('validates manual passwords before provisioning', () => {
-    expect(validateManualPassword('short1')).toBe('Password must be at least 10 characters.')
-    expect(validateManualPassword('longpassword')).toBe('Password must contain at least one number.')
-    expect(validateManualPassword('1234567890')).toBe('Password must contain at least one letter.')
+    expect(validateManualPassword('short1')).toBe('La password deve contenere almeno 10 caratteri.')
+    expect(validateManualPassword('longpassword')).toBe('La password deve contenere almeno un numero.')
+    expect(validateManualPassword('1234567890')).toBe('La password deve contenere almeno una lettera.')
     expect(validateManualPassword('validpass1')).toBe('')
   })
 
@@ -121,7 +126,7 @@ describe('AccessManagementPanel helpers', () => {
 
     expect(display.title).toBe(tournament.teams[0].name)
     expect(display.username).toBe('team_red')
-    expect(display.passwordLabel).toBe('Password: NOT STORED')
+    expect(display.passwordLabel).toBe('Password: NON SALVATA')
     expect(JSON.stringify(display)).not.toContain('temporary')
   })
 })

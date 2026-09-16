@@ -2,7 +2,7 @@ import type { GenderStartingScore } from '../types/domain'
 
 export function GenderBonusBadge({ score }: { score: GenderStartingScore }) {
   return (
-    <div className="rounded border border-[#FFD000]/30 bg-[#FFD000]/10 px-3 py-2 text-sm font-bold text-[#FFD000]">
+    <div className="rounded border border-[var(--event-primary)]/30 bg-[var(--event-primary)]/10 px-3 py-2 text-sm font-bold text-[var(--event-primary)]">
       Bonus donne: {label(score.teamA)}-{label(score.teamB)} a ogni nuovo game
     </div>
   )

@@ -10,6 +10,7 @@ export type PlayerRouteState =
       type: 'ready'
       playerTeam: Team
       match: Match
+      matches: Match[]
       teamA?: Team
       teamB?: Team
       cards: TeamCard[]
@@ -27,14 +28,14 @@ export function resolvePlayerRouteState(input: {
 }): PlayerRouteState {
   if (input.isLoading) return { type: 'loading' }
   if (input.repositoryError) {
-    return { type: 'error', title: 'Tournament unavailable', message: input.repositoryError }
+    return { type: 'error', title: 'Impossibile caricare le partite', message: input.repositoryError }
   }
 
   const teamId = resolvePlayerTeamId(input.provider, input.profile, input.demoSelectedTeamId)
   if (!teamId) {
     return {
       type: 'error',
-      title: 'Team profile missing',
+      title: 'Profilo squadra mancante',
       message: 'This account is not associated with a team.',
     }
   }
@@ -43,7 +44,7 @@ export function resolvePlayerRouteState(input: {
   if (!playerTeam) {
     return {
       type: 'error',
-      title: 'Team not found',
+      title: 'Squadra non trovata',
       message: 'The team associated with this account is not configured in the tournament.',
     }
   }
@@ -51,17 +52,20 @@ export function resolvePlayerRouteState(input: {
   if (playerTeam.players.length === 0) {
     return {
       type: 'error',
-      title: 'No players configured',
-      message: `${playerTeam.name} does not have players configured yet.`,
+      title: 'Nessun giocatore configurato',
+      message: `${playerTeam.name} non ha ancora giocatori configurati.`,
     }
   }
 
-  const match = input.tournament.matches.find((item) => item.teamAId === playerTeam.id || item.teamBId === playerTeam.id)
+  const matches = input.tournament.matches
+    .filter((item) => item.teamAId === playerTeam.id || item.teamBId === playerTeam.id)
+    .sort((a, b) => Number(a.status === 'completed') - Number(b.status === 'completed'))
+  const match = matches[0]
   if (!match) {
     return {
       type: 'error',
-      title: 'No match configured',
-      message: `${playerTeam.name} is not assigned to an active tournament match yet.`,
+      title: 'Nessuna partita programmata',
+      message: `${playerTeam.name} non è ancora assegnata a una partita del torneo.`,
     }
   }
 
@@ -69,6 +73,7 @@ export function resolvePlayerRouteState(input: {
     type: 'ready',
     playerTeam,
     match,
+    matches,
     teamA: getTeam(input.tournament, match.teamAId),
     teamB: getTeam(input.tournament, match.teamBId),
     cards: input.tournament.teamCards.filter((teamCard) => teamCard.teamId === playerTeam.id),

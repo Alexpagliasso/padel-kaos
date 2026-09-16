@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { LogIn } from 'lucide-react'
+import Login from '@mui/icons-material/Login'
+import { Box, Paper, TextField, Alert, Typography } from '@mui/material'
+import { PrimaryAction, TournamentLogo } from '../shared/components/Foundation'
 import { dataProvider } from '../repositories'
 import { useAuth } from '../features/auth/authContext'
 import { getLoginButtonLabel, isLoginSubmitDisabled } from './loginRouteState'
@@ -18,9 +20,15 @@ export function LoginRoute() {
   if (profile) return <Navigate to={(location.state as { from?: string } | null)?.from ?? '/admin'} replace />
 
   return (
-    <main className="grid min-h-svh place-items-center bg-[#0b0b0b] px-4 text-white">
-      <form
-        className="grid w-full max-w-sm gap-4 rounded border border-white/10 bg-[#171717] p-5"
+    <Box component="main" sx={{ minHeight: '100svh', display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1.1fr 1fr' }, alignItems: 'center', gap: 4, p: { xs: 3, md: 8 }, background: 'radial-gradient(ellipse at top left, var(--event-soft), transparent 70%)' }}>
+      <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+        <TournamentLogo />
+        <Typography variant="h1" sx={{ mt: 8, fontSize: 'clamp(4rem, 7vw, 8rem)' }}>GIOCA.<br />VIVI.<br />
+          <Box component="span" sx={{ color: 'primary.main' }}>KAOS.</Box>
+        </Typography>
+        <Typography color="text.secondary" sx={{ mt: 3 }}>Il tuo evento. La tua squadra. Il prossimo punto.</Typography>
+      </Box>
+      <Paper component="form" sx={{ display: 'grid', gap: 3, width: '100%', maxWidth: 460, mx: 'auto', p: { xs: 3, md: 5 } }}
         onSubmit={async (event) => {
           event.preventDefault()
           setSubmitting(true)
@@ -30,46 +38,43 @@ export function LoginRoute() {
             if (result.ok) {
               navigate(result.redirectTo ?? '/admin', { replace: true })
             } else {
-              setMessage(result.message ?? 'Login failed')
+              setMessage(result.message ?? 'Accesso non riuscito')
             }
           } catch (error) {
-            setMessage(error instanceof Error ? error.message : 'Login failed')
+            setMessage(error instanceof Error ? error.message : 'Accesso non riuscito')
           } finally {
             setSubmitting(false)
           }
         }}
       >
         <div>
-          <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FFD000]">Padel Kaos</p>
-          <h1 className="mt-2 text-3xl font-black">Login</h1>
+          <p className="text-sm font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">Padel Kaos</p>
+          <h1 className="mt-2 text-3xl font-black">Accedi</h1>
         </div>
-        <input
+        <TextField
           autoComplete="username"
-          className="rounded border border-white/10 bg-black px-3 py-3 font-bold"
-          placeholder="Username"
+          label="Nome utente"
           required
           value={username}
           onChange={(event) => setUsername(event.target.value)}
         />
-        <input
+        <TextField
           autoComplete="current-password"
-          className="rounded border border-white/10 bg-black px-3 py-3 font-bold"
-          placeholder="Password"
+          label="Password"
           required
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        {message ? <p className="text-sm font-bold text-red-200">{message}</p> : null}
-        <button
-          className="inline-flex items-center justify-center gap-2 rounded bg-[#FFD000] px-4 py-3 font-black text-black disabled:opacity-50"
+        {message ? <Alert severity="error">{message}</Alert> : null}
+        <PrimaryAction
           disabled={isLoginSubmitDisabled(submitting, status)}
           type="submit"
         >
-          <LogIn className="size-4" />
+          <Login fontSize="small" sx={{ mr: 1 }} />
           {getLoginButtonLabel(submitting)}
-        </button>
-      </form>
-    </main>
+        </PrimaryAction>
+      </Paper>
+    </Box>
   )
 }

@@ -6,8 +6,12 @@ describe('admin navigation', () => {
     expect(adminNavigationItems.map((item) => item.to)).toEqual([
       '/admin',
       '/admin/setup',
+      '/admin/teams',
+      '/admin/groups',
+      '/admin/calendar',
       '/admin/control-room',
       '/admin/access',
+      '/admin/appearance',
       '/admin/recovery',
     ])
   })

@@ -2,18 +2,18 @@ import { UsersRound } from 'lucide-react'
 import type { Match, Team } from '../types/domain'
 import { getPlayerName } from '../../features/tournament/selectors'
 
-export function LineupStrip({ match, teamA, teamB }: { match: Match; teamA?: Team; teamB?: Team }) {
+export function LineupStrip({ match, teamA, teamB, display = false }: { match: Match; teamA?: Team; teamB?: Team; display?: boolean }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2">
+    <div className={display ? "display-lineup grid gap-3 md:grid-cols-2" : "grid gap-3 md:grid-cols-2"}>
       {[teamA, teamB].map((team) => {
         const teamLineups = match.lineups
-          .filter((lineup) => lineup.teamId === team?.id)
+          .filter((lineup) => lineup.teamId === team?.id && (!display || lineup.setNumber === match.score.currentSet))
           .sort((first, second) => first.setNumber - second.setNumber)
         return (
           <div key={team?.id} className="rounded border border-white/10 bg-white/[0.04] p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase text-white/70">
-              <UsersRound className="size-4 text-[#FFD000]" />
-              {team?.shortName ?? 'Team'}
+              <UsersRound className="size-4 text-[var(--event-primary)]" />
+              {team?.shortName ?? 'Squadra'}
             </div>
             {teamLineups.length > 0 ? (
               <div className="grid gap-3">
@@ -21,7 +21,7 @@ export function LineupStrip({ match, teamA, teamB }: { match: Match; teamA?: Tea
                   <div key={`${lineup.teamId}-${lineup.setNumber}`} className="rounded bg-black/25 p-3">
                     <p className="mb-2 text-xs font-black uppercase text-white/40">
                       {getLineupPhaseLabel(lineup.setNumber)}
-                      {lineup.setNumber === match.score.currentSet ? ' · Current' : ''}
+                      {lineup.setNumber === match.score.currentSet ? ' · Attuale' : ''}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {lineup.activePlayerIds.map((playerId) => (
@@ -30,7 +30,7 @@ export function LineupStrip({ match, teamA, teamB }: { match: Match; teamA?: Tea
                         </span>
                       ))}
                       <span className="rounded border border-dashed border-white/20 px-3 py-2 text-sm text-white/50">
-                        Bench: {getPlayerName(team, lineup.benchPlayerId)}
+                        Panchina: {getPlayerName(team, lineup.benchPlayerId)}
                       </span>
                     </div>
                   </div>
@@ -38,7 +38,7 @@ export function LineupStrip({ match, teamA, teamB }: { match: Match; teamA?: Tea
               </div>
             ) : (
               <span className="rounded border border-dashed border-white/20 px-3 py-2 text-sm text-white/50">
-                Lineup TBD
+                Formazione da definire
               </span>
             )}
           </div>

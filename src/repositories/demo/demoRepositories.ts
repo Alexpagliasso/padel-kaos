@@ -44,5 +44,7 @@ export function useDemoTeamRepository(): TeamRepositoryContract {
   return {
     createTeam: useDemoStore((state) => state.createTeam),
     updateTeam: useDemoStore((state) => state.updateTeam),
+    setTeamRanking: useDemoStore((state) => state.setTeamRanking),
+    assignRandomTeamRankings: useDemoStore((state) => state.assignRandomTeamRankings),
   }
 }

@@ -36,10 +36,10 @@ export const tournament: Tournament = {
     { id: 'court-3', name: 'Campo 3' },
   ],
   teams: [
-    { id: 'team-a', name: 'Milano Thunder', shortName: 'MTH', color: '#FFD000', groupId: 'g-alpha', players: players.a },
-    { id: 'team-b', name: 'Roma Smash', shortName: 'RSM', color: '#00D1FF', groupId: 'g-alpha', players: players.b },
-    { id: 'team-c', name: 'Torino Rebels', shortName: 'TRB', color: '#FF4D6D', groupId: 'g-beta', players: players.c },
-    { id: 'team-d', name: 'Napoli Volt', shortName: 'NPV', color: '#38E078', groupId: 'g-beta', players: players.d },
+    { id: 'team-a', name: 'Milano Thunder', shortName: 'MTH', color: '#FFD000', groupId: 'g-alpha', ranking: null, players: players.a },
+    { id: 'team-b', name: 'Roma Smash', shortName: 'RSM', color: '#00D1FF', groupId: 'g-alpha', ranking: null, players: players.b },
+    { id: 'team-c', name: 'Torino Rebels', shortName: 'TRB', color: '#FF4D6D', groupId: 'g-beta', ranking: null, players: players.c },
+    { id: 'team-d', name: 'Napoli Volt', shortName: 'NPV', color: '#38E078', groupId: 'g-beta', ranking: null, players: players.d },
   ],
   matches: [
     {

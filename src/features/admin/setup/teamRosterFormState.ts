@@ -72,14 +72,14 @@ export function createTeamAccessDraft(teamName: string): TeamAccessDraft {
 }
 
 export function validateTeamRosterDraft(draft: TeamRosterDraft): TeamRosterValidationResult {
-  if (!draft.teamName.trim()) return { valid: false, reason: 'Team name is required.' }
-  if (draft.players.length !== 3) return { valid: false, reason: 'Exactly 3 players are required.' }
+  if (!draft.teamName.trim()) return { valid: false, reason: 'Il nome squadra è obbligatorio.' }
+  if (draft.players.length !== 3) return { valid: false, reason: 'Sono richiesti esattamente 3 giocatori.' }
 
   for (const [index, player] of draft.players.entries()) {
-    const label = `Player ${index + 1}`
-    if (!player.firstName.trim()) return { valid: false, reason: `${label} first name is required.` }
-    if (!player.lastName.trim()) return { valid: false, reason: `${label} last name is required.` }
-    if (player.gender !== 'male' && player.gender !== 'female') return { valid: false, reason: `${label} gender is required.` }
+    const label = `Giocatore ${index + 1}`
+    if (!player.firstName.trim()) return { valid: false, reason: `${label}: il nome è obbligatorio.` }
+    if (!player.lastName.trim()) return { valid: false, reason: `${label}: il cognome è obbligatorio.` }
+    if (player.gender !== 'male' && player.gender !== 'female') return { valid: false, reason: `${label}: il genere è obbligatorio.` }
   }
 
   return { valid: true }
@@ -99,7 +99,7 @@ export function toCreateTeamInput(draft: TeamRosterDraft): CreateTeamInput {
 }
 
 export function validateTeamAccessDraft(access: TeamAccessDraft) {
-  if (!access.username.trim()) return 'Username is required.'
+  if (!access.username.trim()) return 'Il nome utente è obbligatorio.'
   return ''
 }
 

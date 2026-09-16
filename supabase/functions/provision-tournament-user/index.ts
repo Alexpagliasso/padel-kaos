@@ -22,7 +22,7 @@ Deno.serve(async (request) => {
     const input = (await request.json()) as ProvisionInput
     const adminClient = createAdminClient()
     const caller = await getCallerProfile(request, adminClient)
-    requireTournamentAdmin(caller, input.tournamentId)
+    await requireTournamentAdmin(caller, input.tournamentId, adminClient)
 
     const { data: tournament, error: tournamentError } = await adminClient
       .from('tournaments')

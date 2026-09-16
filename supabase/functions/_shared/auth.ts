@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { assertTournamentAdminMembership } from './tournamentAdmin.ts'
 
 export type AppRole = 'admin' | 'referee' | 'team' | 'court_display' | 'main_display'
 
@@ -77,10 +78,11 @@ export async function getCallerProfile(request: Request, adminClient: ReturnType
   return profile as Profile
 }
 
-export function requireTournamentAdmin(profile: Profile, tournamentId: string) {
-  if (profile.role !== 'admin' || profile.tournament_id !== tournamentId) {
-    throw new Error('not authorized')
-  }
+export async function requireTournamentAdmin(profile: Profile, tournamentId: string, adminClient: ReturnType<typeof createAdminClient>) {
+  await assertTournamentAdminMembership(profile, tournamentId, async (userId, targetId) => {
+    return await adminClient.from('tournament_admins').select('user_id')
+      .eq('tournament_id', targetId).eq('user_id', userId).maybeSingle()
+  })
 }
 
 export function jsonResponse(body: unknown, status = 200) {

@@ -3,8 +3,9 @@ import { LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from './authContext'
 import { getLogoutRedirectTarget } from './authLogout'
+import { roleLabels } from '../../shared/lib/uiLabels'
 
-export function LogoutButton({ compact = false }: { compact?: boolean }) {
+export function LogoutButton({ compact = false, minimal = false }: { compact?: boolean; minimal?: boolean }) {
   const navigate = useNavigate()
   const { profile, logout } = useAuth()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -19,18 +20,18 @@ export function LogoutButton({ compact = false }: { compact?: boolean }) {
       await logout()
       navigate(getLogoutRedirectTarget(), { replace: true })
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Unable to logout')
+      setError(caughtError instanceof Error ? caughtError.message : 'Impossibile uscire')
       setIsLoggingOut(false)
     }
   }
 
   return (
     <div className={compact ? 'grid justify-items-end gap-1' : 'flex items-center gap-3'}>
-      <div className={compact ? 'text-right' : ''}>
+      {!minimal ? <div className={compact ? 'text-right' : ''}>
         <p className="text-xs font-black uppercase text-white/75">{profile.displayName || profile.username}</p>
-        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/35">{profile.role}</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/35">{roleLabels[profile.role] ?? profile.role}</p>
         {error ? <p className="mt-1 max-w-48 text-xs font-bold text-red-200">{error}</p> : null}
-      </div>
+      </div> : error ? <p className="max-w-48 text-right text-xs font-bold text-red-200">{error}</p> : null}
       <button
         type="button"
         disabled={isLoggingOut}
@@ -38,7 +39,7 @@ export function LogoutButton({ compact = false }: { compact?: boolean }) {
         onClick={() => void handleLogout()}
       >
         <LogOut className="size-4" />
-        {isLoggingOut ? 'Logging out...' : 'Logout'}
+        {isLoggingOut ? 'Uscita…' : 'Esci'}
       </button>
     </div>
   )

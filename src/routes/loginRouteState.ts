@@ -3,5 +3,5 @@ export function isLoginSubmitDisabled(submitting: boolean, status: string) {
 }
 
 export function getLoginButtonLabel(submitting: boolean) {
-  return submitting ? 'Accesso in corso...' : 'Sign in'
+  return submitting ? 'Accesso in corso…' : 'Accedi'
 }

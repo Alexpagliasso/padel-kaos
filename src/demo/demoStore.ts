@@ -7,6 +7,7 @@ import {
   canEndMatch,
   canEndSet,
   getAvailablePairs,
+  getRemainingPair,
   canPlayCardInMatch,
   canRollDice,
   canScorePoint,
@@ -36,6 +37,9 @@ const channelName = 'padel-kaos-demo-sync'
 const initialTournament = createDemoTournament()
 
 const initialState: DemoState = {
+  savedWorkspaces: {},
+  savedEvents: {},
+  savedSelections: {},
   tournament: initialTournament,
   events: [],
   selectedTeamId: initialTournament.teams[0].id,
@@ -112,6 +116,7 @@ export const useDemoStore = create<DemoStore>()(
             shortName: input.name.slice(0, 4).toUpperCase(),
             color: input.color || '#FFD000',
             groupId: state.tournament.groups[0]?.id ?? 'demo-group-a',
+            ranking: null,
             players: input.players.map((player, index) => ({
               id: `${id}-p${index + 1}`,
               teamId: id,
@@ -167,6 +172,22 @@ export const useDemoStore = create<DemoStore>()(
         }))
         return teamId
       },
+      setTeamRanking: (tournamentId, teamId, ranking) => set((state) => {
+        if (state.tournament.id !== tournamentId) throw new Error('Il torneo selezionato non corrisponde al ranking da modificare.')
+        if (!['draft', 'configured'].includes(state.tournament.status ?? 'draft')) throw new Error('Il ranking non può essere modificato dopo l’avvio del torneo.')
+        if (ranking !== null && state.tournament.teams.some((team) => team.id !== teamId && team.ranking === ranking)) throw new Error(`Il ranking ${ranking} è già assegnato a un'altra squadra.`)
+        return { tournament: { ...state.tournament, teams: state.tournament.teams.map((team) => team.id === teamId ? { ...team, ranking } : team) } }
+      }),
+      assignRandomTeamRankings: (tournamentId) => set((state) => {
+        if (state.tournament.id !== tournamentId) throw new Error('Il torneo selezionato non corrisponde al ranking da modificare.')
+        if (!['draft', 'configured'].includes(state.tournament.status ?? 'draft')) throw new Error('Il ranking non può essere modificato dopo l’avvio del torneo.')
+        const rankings = state.tournament.teams.map((_, index) => index + 1)
+        for (let index = rankings.length - 1; index > 0; index -= 1) {
+          const target = Math.floor(Math.random() * (index + 1))
+          ;[rankings[index], rankings[target]] = [rankings[target], rankings[index]]
+        }
+        return { tournament: { ...state.tournament, teams: state.tournament.teams.map((team, index) => ({ ...team, ranking: rankings[index] })) } }
+      }),
       createMatch: (input) =>
         set((state) => {
           const teamA = findTeam(state.tournament, input.teamAId)
@@ -211,6 +232,24 @@ export const useDemoStore = create<DemoStore>()(
             selectedMatchId: match.id,
           }
         }),
+      confirmLineup: (matchId, teamId, setNumber, playerIds) => set((state) => {
+        const match = state.tournament.matches.find((item) => item.id === matchId)
+        const team = state.tournament.teams.find((item) => item.id === teamId)
+        if (!match || !team || ![match.teamAId, match.teamBId].includes(teamId)) throw new Error('Partita o squadra non valida.')
+        const used = match.lineups.filter((item) => item.teamId === teamId && item.setNumber !== setNumber && item.setNumber < 3)
+        const validity = validateLineup(team, {
+          teamId, setNumber, activePlayerIds: playerIds, benchPlayerId: getBenchPlayerId(team, playerIds),
+        }, used)
+        if (!validity.valid) throw new Error(validity.reason)
+        const confirmedAt = new Date().toISOString()
+        let lineups = match.lineups.filter((item) => !(item.teamId === teamId && item.setNumber === setNumber))
+        lineups.push({ teamId, setNumber, activePlayerIds: playerIds, benchPlayerId: getBenchPlayerId(team, playerIds), confirmedAt })
+        const firstTwo = lineups.filter((item) => item.teamId === teamId && item.setNumber < 3)
+        lineups = lineups.filter((item) => !(item.teamId === teamId && item.setNumber === 3))
+        const remaining = firstTwo.length === 2 ? getRemainingPair(team.players, firstTwo) : undefined
+        if (remaining) lineups.push({ teamId, setNumber: 3, activePlayerIds: remaining, benchPlayerId: getBenchPlayerId(team, remaining), confirmedAt })
+        return { tournament: updateMatch(state.tournament, matchId, current => ({ ...current, lineups })) }
+      }),
       assignCard: (teamId, cardId, matchId) =>
         set((state) => ({
           tournament: {
@@ -573,6 +612,9 @@ export const useDemoStore = create<DemoStore>()(
       version: 1,
       storage: createJSONStorage(() => getDemoStorage()),
       partialize: (state) => ({
+        savedWorkspaces: state.savedWorkspaces,
+        savedEvents: state.savedEvents,
+        savedSelections: state.savedSelections,
         tournament: state.tournament,
         events: state.events,
         selectedTeamId: state.selectedTeamId,
@@ -826,6 +868,9 @@ function setupCrossTabSync() {
     channel?.postMessage({
       type: 'PADEL_KAOS_DEMO_STATE',
       state: {
+        savedWorkspaces: state.savedWorkspaces,
+        savedEvents: state.savedEvents,
+        savedSelections: state.savedSelections,
         tournament: state.tournament,
         events: state.events,
         selectedTeamId: state.selectedTeamId,

@@ -125,6 +125,15 @@ describe('mapSupabaseTournamentState', () => {
 
     expect(tournament.teams).toHaveLength(1)
     expect(tournament.teams[0].players).toEqual([])
+    expect(tournament.teams[0].ranking).toBeNull()
+  })
+
+  it('preserva il ranking numerico persistito', () => {
+    const tournament = mapSupabaseTournamentState({
+      tournament: { id: 'tournament-id', name: 'Ranking', phase: 'GROUP_STAGE' },
+      teams: [{ id: 'ranked', name: 'Ranked', short_name: 'R', color: '#fff', group_id: null, ranking: 7 }],
+    })
+    expect(tournament.teams[0].ranking).toBe(7)
   })
 
   it('prefers first_name and last_name when Supabase roster columns are available', () => {

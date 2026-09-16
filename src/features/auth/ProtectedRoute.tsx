@@ -17,7 +17,7 @@ export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) 
 
   if (decision.type === 'allow') return children
   if (decision.type === 'loading') {
-    return <main className="grid min-h-svh place-items-center bg-[#0b0b0b] font-black text-white">Loading</main>
+    return <main className="grid min-h-svh place-items-center bg-[#0b0b0b] font-black text-white">Caricamento</main>
   }
   if (decision.type === 'login') {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />

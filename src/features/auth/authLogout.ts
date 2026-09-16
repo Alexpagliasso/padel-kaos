@@ -6,7 +6,7 @@ export type SupabaseLogoutClient = {
 
 export async function signOutSupabaseSession(client: SupabaseLogoutClient) {
   const { error } = await client.auth.signOut()
-  if (error) throw new Error(error.message || 'Unable to logout')
+  if (error) throw new Error(error.message || 'Impossibile uscire')
 }
 
 export function getLogoutRedirectTarget() {

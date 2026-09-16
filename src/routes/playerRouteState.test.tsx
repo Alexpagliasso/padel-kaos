@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthContext } from '../features/auth/authContext'
 import type { AppProfile } from '../features/auth/authIdentity'
 import { mapSupabaseTournamentState, type SupabaseTournamentStateDto } from '../repositories/supabase/mappers/tournamentMapper'
@@ -114,7 +115,7 @@ describe('resolvePlayerRouteState', () => {
       demoSelectedTeamId: 'team-red-id',
     })
 
-    expect(state).toMatchObject({ type: 'error', title: 'Team profile missing' })
+    expect(state).toMatchObject({ type: 'error', title: 'Profilo squadra mancante' })
   })
 
   it('returns a controlled error when the profile team is not in the tournament', () => {
@@ -125,7 +126,7 @@ describe('resolvePlayerRouteState', () => {
       demoSelectedTeamId: 'team-red-id',
     })
 
-    expect(state).toMatchObject({ type: 'error', title: 'Team not found' })
+    expect(state).toMatchObject({ type: 'error', title: 'Squadra non trovata' })
   })
 
   it('returns a controlled error when the team has no players', () => {
@@ -141,7 +142,7 @@ describe('resolvePlayerRouteState', () => {
       demoSelectedTeamId: 'team-red-id',
     })
 
-    expect(state).toMatchObject({ type: 'error', title: 'No players configured' })
+    expect(state).toMatchObject({ type: 'error', title: 'Nessun giocatore configurato' })
   })
 
   it('returns a controlled error when the team has no match', () => {
@@ -152,7 +153,58 @@ describe('resolvePlayerRouteState', () => {
       demoSelectedTeamId: 'team-red-id',
     })
 
-    expect(state).toMatchObject({ type: 'error', title: 'No match configured' })
+    expect(state).toMatchObject({ type: 'error', title: 'Nessuna partita programmata' })
+  })
+
+  it('shows the persisted scheduled match to both participating teams in a configured tournament', () => {
+    const tournament = createTournament()
+    const scheduledTournament = {
+      ...tournament,
+      status: 'configured' as const,
+      matches: tournament.matches.map((match) => ({ ...match, status: 'scheduled' as const })),
+    }
+
+    const teamAState = resolvePlayerRouteState({
+      provider: 'supabase', tournament: scheduledTournament, profile,
+      demoSelectedTeamId: 'team-blue-id',
+    })
+    const teamBState = resolvePlayerRouteState({
+      provider: 'supabase', tournament: scheduledTournament,
+      profile: { ...profile, id: 'team-blue-user', teamId: 'team-blue-id' },
+      demoSelectedTeamId: 'team-red-id',
+    })
+
+    expect(teamAState).toMatchObject({ type: 'ready', match: { id: 'match-id' } })
+    expect(teamBState).toMatchObject({ type: 'ready', match: { id: 'match-id' } })
+  })
+
+  it('does not show another team match to an unrelated team', () => {
+    const tournament = createTournament()
+    const teamC = {
+      ...tournament.teams[0], id: 'team-green-id', name: 'Team Green', shortName: 'GREEN',
+      players: tournament.teams[0].players.map((player, index) => ({ ...player, id: `green-${index + 1}`, teamId: 'team-green-id' })),
+    }
+    const state = resolvePlayerRouteState({
+      provider: 'supabase', tournament: { ...tournament, teams: [...tournament.teams, teamC] },
+      profile: { ...profile, id: 'team-green-user', teamId: 'team-green-id' },
+      demoSelectedTeamId: 'team-red-id',
+    })
+
+    expect(state).toMatchObject({ type: 'error', title: 'Nessuna partita programmata' })
+  })
+
+  it('reports a Supabase/RLS failure as a load failure instead of an empty schedule', () => {
+    const state = resolvePlayerRouteState({
+      provider: 'supabase', tournament: { ...createTournament(), matches: [] }, profile,
+      repositoryError: 'Unable to load matches: permission denied',
+      demoSelectedTeamId: 'team-red-id',
+    })
+
+    expect(state).toMatchObject({
+      type: 'error',
+      title: 'Impossibile caricare le partite',
+      message: 'Unable to load matches: permission denied',
+    })
   })
 
   it('keeps demo mode driven by the demo selected team id', () => {
@@ -193,21 +245,23 @@ describe('PlayerRouteContent', () => {
           refreshProfile: vi.fn(),
         }}
       >
-        <MemoryRouter>
+        <QueryClientProvider client={new QueryClient()}><MemoryRouter>
           <PlayerRouteContent
             tournament={tournament}
             events={[]}
             routeState={routeState}
             onSelectDemoTeam={vi.fn()}
             onPlayDemoCard={vi.fn()}
+            headerAction={<button>Esci</button>}
           />
-        </MemoryRouter>
+        </MemoryRouter></QueryClientProvider>
       </AuthContext.Provider>,
     )
 
-    expect(html).toContain('PLAYER AREA')
+    expect(html).toContain('AREA GIOCATORE')
     expect(html).toContain('Ciao Red Player 1')
     expect(html).toContain('Team Red')
+    expect(html).toContain('Esci')
     expect(html).not.toContain('view as simulator')
   })
 })

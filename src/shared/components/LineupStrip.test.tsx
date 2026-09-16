@@ -9,6 +9,7 @@ const team: Team = {
   shortName: 'A',
   color: '#FFD000',
   groupId: 'group-a',
+  ranking: null,
   players: [
     { id: 'A', teamId: 'team-a', firstName: 'Mario', lastName: 'Rossi', name: 'Mario Rossi', nickname: 'Mario', gender: 'man', accessToken: '' },
     { id: 'B', teamId: 'team-a', firstName: 'Luca', lastName: 'Bianchi', name: 'Luca Bianchi', nickname: 'Luca', gender: 'man', accessToken: '' },

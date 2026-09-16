@@ -25,11 +25,24 @@ export type SupabaseTournamentRow = {
   name: string
   phase?: string | null
   status?: string | null
+  teams_count?: number | null
+  teams_per_group?: number | null
+  gold_qualified_count?: number | null
+  silver_qualified_count?: number | null
+  courts_count?: number | null
+  allow_byes?: boolean | null
+  theme_preset?: string | null
+  theme_color?: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export type SupabaseGroupRow = {
   id: string
   name: string
+  tournament_id?: string
+  sort_order?: number
+  assigned_court_id?: string | null
 }
 
 export type SupabaseCourtRow = {
@@ -43,6 +56,7 @@ export type SupabaseTeamRow = {
   short_name: string
   color: string
   group_id: string | null
+  ranking?: number | null
 }
 
 export type SupabasePlayerRow = {
@@ -91,6 +105,7 @@ export type SupabaseMatchLineupRow = {
   active_player_1_id: string
   active_player_2_id: string
   bench_player_id: string | null
+  confirmed_at?: string | null
 }
 
 export type SupabaseCardDefinitionRow = {
@@ -99,12 +114,16 @@ export type SupabaseCardDefinitionRow = {
   name: string
   slug: string
   description: string
+  long_description?: string | null
   effect_type: string
   target_type: string
   duration_type: string
   duration_value: number | null
   can_be_stolen: boolean | null
   enabled: boolean | null
+  image_url?: string | null
+  archived_at?: string | null
+  updated_at?: string | null
 }
 
 export type SupabaseMatchCardRow = {
@@ -198,6 +217,7 @@ export function mapSupabaseTournamentState(dto: SupabaseTournamentStateDto): Tou
     shortName: team.short_name,
     color: team.color,
     groupId: team.group_id ?? '',
+    ranking: team.ranking ?? null,
     players: players.filter((player) => player.team_id === team.id).map(mapPlayer),
   }))
 
@@ -226,7 +246,17 @@ export function mapSupabaseTournamentState(dto: SupabaseTournamentStateDto): Tou
     name: dto.tournament.name,
     phase: mapTournamentPhase(dto.tournament.phase),
     status: mapTournamentStatus(dto.tournament.status),
-    groups: (dto.groups ?? []).map((group) => ({ id: group.id, name: group.name })),
+    teamsCount: dto.tournament.teams_count ?? null,
+    teamsPerGroup: dto.tournament.teams_per_group ?? null,
+    goldQualifiedCount: dto.tournament.gold_qualified_count ?? null,
+    silverQualifiedCount: dto.tournament.silver_qualified_count ?? null,
+    courtsCount: dto.tournament.courts_count ?? null,
+    allowByes: dto.tournament.allow_byes ?? null,
+    themePreset: mapThemePreset(dto.tournament.theme_preset),
+    themeColor: dto.tournament.theme_color ?? null,
+    createdAt: dto.tournament.created_at ?? null,
+    updatedAt: dto.tournament.updated_at ?? null,
+    groups: (dto.groups ?? []).map((group) => ({ id: group.id, name: group.name, tournamentId: group.tournament_id ?? dto.tournament.id, sortOrder: group.sort_order, assignedCourtId: group.assigned_court_id ?? null })),
     courts: (dto.courts ?? []).map((court) => ({ id: court.id, name: court.name })),
     rounds: (dto.rounds ?? []).map(mapRound),
     teams,
@@ -239,6 +269,12 @@ export function mapSupabaseTournamentState(dto: SupabaseTournamentStateDto): Tou
     globalEvents: (dto.globalEvents ?? []).map(mapGlobalEvent),
     standings: teams.map((team) => ({ teamId: team.id, played: 0, won: 0, lost: 0, points: 0 })),
   }
+}
+
+function mapThemePreset(value: string | null | undefined): Tournament['themePreset'] {
+  return value === 'white' || value === 'blue' || value === 'orange' || value === 'green' || value === 'custom'
+    ? value
+    : null
 }
 
 function mapPlayer(player: SupabasePlayerRow): Player {
@@ -266,6 +302,7 @@ function mapLineup(lineup: SupabaseMatchLineupRow): MatchLineup {
     phase: mapLineupPhase(lineup.phase, lineup.set_number),
     activePlayerIds: [lineup.active_player_1_id, lineup.active_player_2_id],
     benchPlayerId: lineup.bench_player_id ?? '',
+    confirmedAt: lineup.confirmed_at ?? undefined,
   }
 }
 
@@ -298,6 +335,7 @@ function mapCardDefinition(card: SupabaseCardDefinitionRow): CardDefinition {
     name: card.name,
     slug: card.slug,
     description: card.description,
+    longDescription: card.long_description ?? card.description,
     category: card.target_type === 'global' || card.target_type === 'round' ? 'kaos' : 'bonus',
     target: mapCardTarget(card.target_type),
     activationTiming: 'anytime',
@@ -308,6 +346,10 @@ function mapCardDefinition(card: SupabaseCardDefinitionRow): CardDefinition {
     canBeStolen: card.can_be_stolen ?? false,
     isGlobal: card.tournament_id === null,
     enabled: card.enabled ?? true,
+    tournamentId: card.tournament_id,
+    imageUrl: card.image_url ?? null,
+    archivedAt: card.archived_at ?? null,
+    updatedAt: card.updated_at ?? null,
   }
 }
 

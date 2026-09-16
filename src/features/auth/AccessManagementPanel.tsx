@@ -3,9 +3,13 @@ import { Copy, Download, KeyRound, UsersRound } from 'lucide-react'
 import {
   credentialsToCsv,
   getProvisioningErrorMessage,
+  getMissingRefereeCourts,
   listTournamentProvisionedAccounts,
+  provisionMissingRefereeAccounts,
   provisionTeamAccounts,
   provisionTournamentUser,
+  RefereeProvisioningError,
+  replaceRefereeCourtAssignments,
   type ProvisionedCredential,
 } from '../../services/supabase/provisioning'
 import { downloadTextFile } from '../../shared/lib/downloadTextFile'
@@ -38,6 +42,7 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
   const [accountsError, setAccountsError] = useState('')
   const [accountsLoading, setAccountsLoading] = useState(isSupabaseProvider())
   const [loading, setLoading] = useState(false)
+  const [savingAssignments, setSavingAssignments] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -76,6 +81,11 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
     () => tournament.teams.filter((team) => !findTeamAccount(accounts, team.id)),
     [accounts, tournament.teams],
   )
+  const refereeAccounts = useMemo(() => accounts.filter((account) => account.role === 'referee' && account.courtId), [accounts])
+  const missingRefereeCourts = useMemo(
+    () => getMissingRefereeCourts(tournament.courts, accounts),
+    [accounts, tournament.courts],
+  )
   const canCreate = !singleInputError && !loading
   const canBulkCreate = teamsWithoutAccounts.length > 0 && !loading && !accountsLoading && !accountsError
 
@@ -106,7 +116,7 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
       }])
       setPassword('')
       setConfirmPassword('')
-      setMessage('Account created. Save the temporary password now.')
+      setMessage('Account creato. Salva subito la password temporanea.')
       await refreshAccounts()
     } catch (caughtError) {
       setLastCredentials([])
@@ -127,7 +137,7 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
         teams: teamsWithoutAccounts.map((team) => ({ id: team.id, name: team.name, shortName: team.shortName })),
       })
       setLastCredentials(credentials)
-      setMessage(`Created ${credentials.length} accounts. Save this file now. Passwords cannot be recovered later.`)
+      setMessage(`Creati ${credentials.length} account. Salva subito il file: le password non potranno essere recuperate.`)
       await refreshAccounts()
     } catch (caughtError) {
       setLastCredentials([])
@@ -135,6 +145,48 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
     } finally {
       setLoading(false)
     }
+  }
+
+  async function createMissingReferees() {
+    setMessage('')
+    setError('')
+    setCopyMessage('')
+    setLoading(true)
+    try {
+      const credentials = await provisionMissingRefereeAccounts({
+        tournamentId: tournament.id,
+        courts: tournament.courts,
+        accounts,
+      })
+      setLastCredentials(credentials)
+      setMessage(credentials.length
+        ? `Creati ${credentials.length} account arbitro. Salva subito le password temporanee.`
+        : 'Tutti i campi hanno già un arbitro configurato.')
+      await refreshAccounts()
+    } catch (caughtError) {
+      const createdCredentials = caughtError instanceof RefereeProvisioningError ? caughtError.createdCredentials : []
+      setLastCredentials(createdCredentials)
+      setError(caughtError instanceof Error ? caughtError.message : 'Impossibile generare gli arbitri mancanti.')
+      try { await refreshAccounts() } catch { /* Preserve the provisioning error and returned credentials. */ }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function toggleRefereeCourt(account: ExistingProvisionedAccount, courtId: string, checked: boolean) {
+    const current = account.courtIds ?? (account.courtId ? [account.courtId] : [])
+    const next = checked ? [...new Set([...current, courtId])] : current.filter((id) => id !== courtId)
+    if (!next.length) { setError('Ogni arbitro deve mantenere almeno un campo assegnato.'); return }
+    const owner = accounts.find((candidate) => candidate.role === 'referee' && candidate.id !== account.id
+      && (candidate.courtIds ?? (candidate.courtId ? [candidate.courtId] : [])).includes(courtId))
+    if (checked && owner) { setError(`${tournament.courts.find((court) => court.id === courtId)?.name ?? 'Il campo'} è già assegnato a ${owner.displayName}.`); return }
+    setSavingAssignments(account.id); setError(''); setMessage('')
+    try {
+      await replaceRefereeCourtAssignments(account.id, next)
+      await refreshAccounts()
+      setMessage('Assegnazioni arbitro aggiornate.')
+    } catch (caughtError) { setError(getProvisioningErrorMessage(caughtError)) }
+    finally { setSavingAssignments('') }
   }
 
   function applyPreset(preset: ProvisionPreset) {
@@ -171,15 +223,15 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
   return (
     <section className="rounded border border-white/10 bg-[#171717] p-5">
       <div className="mb-4 flex items-center gap-2">
-        <KeyRound className="size-5 text-[#FFD000]" />
-        <h2 className="text-lg font-black">Access Management</h2>
+        <KeyRound className="size-5 text-[var(--event-primary)]" />
+        <h2 className="text-lg font-black">Gestione accessi</h2>
       </div>
       <div className="mb-4 grid gap-2 md:grid-cols-5">
         {buildProvisionPresets(tournament).map((preset) => (
           <button
             key={preset.username}
             type="button"
-            className="rounded border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black uppercase text-white/70 hover:border-[#FFD000]/50"
+            className="rounded border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black uppercase text-white/70 hover:border-[var(--event-primary)]/50"
             onClick={() => applyPreset(preset)}
           >
             {preset.label}
@@ -187,21 +239,21 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
         ))}
       </div>
       <form className="grid gap-3 border-t border-white/10 pt-4" onSubmit={createLogin}>
-        <p className="text-xs font-black uppercase tracking-[0.18em] text-white/40">Create single account</p>
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-white/40">Crea account singolo</p>
         <label className="grid gap-1 text-sm font-bold text-white/70">
           Role
           <select className="rounded bg-black px-3 py-3 text-white" value={role} onChange={(event) => setRole(event.target.value as ProvisionableRole)}>
-            <option value="team">Team Login</option>
-            <option value="referee">Referee Login</option>
-            <option value="court_display">Court Display Login</option>
-            <option value="main_display">Main Display Login</option>
+            <option value="team">Accesso squadra</option>
+            <option value="referee">Accesso arbitro</option>
+            <option value="court_display">Accesso schermo campo</option>
+            <option value="main_display">Accesso schermo principale</option>
           </select>
         </label>
         <label className="grid gap-1 text-sm font-bold text-white/70">
-          Username
+          Nome utente
           <input className="rounded bg-black px-3 py-3 text-white" placeholder="team_red" value={username} onChange={(event) => setUsername(event.target.value)} />
         </label>
-        <p className="text-sm font-bold text-white/70">Password mode</p>
+        <p className="text-sm font-bold text-white/70">Modalità password</p>
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="flex items-center gap-2 rounded border border-white/10 bg-black px-3 py-3 text-sm font-bold">
             <input type="radio" checked={passwordMode === 'auto'} onChange={() => setPasswordMode('auto')} />
@@ -224,7 +276,7 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
               />
             </label>
             <label className="grid gap-1 text-sm font-bold text-white/70">
-              Confirm password
+              Conferma password
               <input
                 className="rounded bg-black px-3 py-3 text-white"
                 type="password"
@@ -250,62 +302,75 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
         {singleInputError ? <p className="text-xs font-bold text-white/45">{singleInputError}</p> : null}
         <button type="submit" className="inline-flex items-center justify-center gap-2 rounded bg-white px-3 py-3 font-black text-black disabled:opacity-50" disabled={!canCreate}>
           <KeyRound className="size-4" />
-          {loading ? 'Creating account...' : 'Create Login'}
+          {loading ? 'Creazione account…' : 'Crea accesso'}
         </button>
       </form>
+
+      <div className="mt-5 grid gap-3 border-t border-white/10 pt-4">
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-white/40">Arbitri</p>
+        <div className="grid gap-1 text-sm font-bold text-white/60 sm:grid-cols-3">
+          <p>{tournament.courts.length} campi</p>
+          <p>{refereeAccounts.length} arbitri configurati</p>
+          <p>{missingRefereeCourts.length} arbitri mancanti</p>
+        </div>
+        <button type="button" className="inline-flex items-center justify-center gap-2 rounded bg-[var(--event-primary)] px-3 py-3 font-black text-black disabled:opacity-50" disabled={loading || accountsLoading || Boolean(accountsError) || missingRefereeCourts.length === 0} onClick={() => void createMissingReferees()}>
+          <UsersRound className="size-4" />
+          {loading ? 'Generazione arbitri…' : 'Genera arbitri mancanti'}
+        </button>
+      </div>
 
       <div className="mt-5 grid gap-3 border-t border-white/10 pt-4">
         <p className="text-xs font-black uppercase tracking-[0.18em] text-white/40">Bulk team provisioning</p>
         <p className="text-sm font-bold text-white/55">
           {teamsWithoutAccounts.length} teams without accounts.
         </p>
-        <button className="inline-flex items-center justify-center gap-2 rounded bg-[#FFD000] px-3 py-3 font-black text-black disabled:opacity-50" disabled={!canBulkCreate} onClick={createBulkTeamLogins}>
+        <button className="inline-flex items-center justify-center gap-2 rounded bg-[var(--event-primary)] px-3 py-3 font-black text-black disabled:opacity-50" disabled={!canBulkCreate} onClick={createBulkTeamLogins}>
           <UsersRound className="size-4" />
-          Generate Team Accounts
+          Genera account squadre
         </button>
       </div>
 
       {message ? <p className="mt-3 text-sm font-bold text-white/60">{message}</p> : null}
-      {copyMessage ? <p className="mt-3 text-sm font-bold text-[#FFD000]">{copyMessage}</p> : null}
+      {copyMessage ? <p className="mt-3 text-sm font-bold text-[var(--event-primary)]">{copyMessage}</p> : null}
       {error ? <p className="mt-3 rounded border border-red-400/40 bg-red-950/20 p-3 text-sm font-bold text-red-100">{error}</p> : null}
       {lastCredentials.length > 0 ? (
         <div className="mt-4 grid gap-3 rounded bg-black p-4 text-sm">
           <div>
-            <p className="font-black uppercase text-[#FFD000]">Account created</p>
-            <p className="text-xs font-bold text-white/45">Save this file now. Passwords cannot be recovered later.</p>
+            <p className="font-black uppercase text-[var(--event-primary)]">Account created</p>
+            <p className="text-xs font-bold text-white/45">Salva subito il file. Le password non potranno essere recuperate.</p>
           </div>
           {lastCredentials.map((credential) => (
             <div key={`${credential.role}-${credential.username}`} className="grid gap-2 rounded border border-white/10 p-3">
               {credential.teamName ? <p className="font-black">{credential.teamName}</p> : null}
-              <p className="text-xs uppercase text-white/35">Username</p>
+              <p className="text-xs uppercase text-white/35">Nome utente</p>
               <p className="font-mono">{credential.username}</p>
               <p className="text-xs uppercase text-white/35">Temporary password</p>
               <p className="font-mono">{credential.temporaryPassword ?? 'NOT RETURNED'}</p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className="inline-flex items-center gap-2 rounded bg-white px-3 py-2 text-xs font-black text-black" onClick={() => copyText('Username', credential.username)}>
+                <button type="button" className="inline-flex items-center gap-2 rounded bg-white px-3 py-2 text-xs font-black text-black" onClick={() => copyText('Nome utente', credential.username)}>
                   <Copy className="size-3" />
-                  Copy Username
+                  Copia nome utente
                 </button>
                 {credential.temporaryPassword ? (
                   <button type="button" className="inline-flex items-center gap-2 rounded bg-white px-3 py-2 text-xs font-black text-black" onClick={() => copyText('Password', credential.temporaryPassword ?? '')}>
                     <Copy className="size-3" />
-                    Copy Password
+                    Copia password
                   </button>
                 ) : null}
               </div>
             </div>
           ))}
-          <button type="button" className="inline-flex items-center justify-center gap-2 rounded bg-[#FFD000] px-3 py-3 font-black text-black" onClick={() => downloadCredentials()}>
+          <button type="button" className="inline-flex items-center justify-center gap-2 rounded bg-[var(--event-primary)] px-3 py-3 font-black text-black" onClick={() => downloadCredentials()}>
             <Download className="size-4" />
-            Download Credentials
+            Scarica credenziali
           </button>
         </div>
       ) : null}
       <div className="mt-5 grid gap-3 border-t border-white/10 pt-4">
         <p className="text-xs font-black uppercase tracking-[0.18em] text-white/40">Existing accounts</p>
-        {accountsLoading ? <p className="text-sm font-bold text-white/50">Loading accounts...</p> : null}
+        {accountsLoading ? <p className="text-sm font-bold text-white/50">Caricamento account…</p> : null}
         {accountsError ? <p className="rounded border border-red-400/40 bg-red-950/20 p-3 text-sm font-bold text-red-100">{accountsError}</p> : null}
-        {!accountsLoading && !accountsError && accounts.length === 0 ? <p className="text-sm font-bold text-white/50">No test accounts created yet.</p> : null}
+        {!accountsLoading && !accountsError && accounts.length === 0 ? <p className="text-sm font-bold text-white/50">Nessun account di test ancora creato.</p> : null}
         {accounts.map((account) => {
           const display = getExistingAccountDisplay(account, tournament)
           return (
@@ -316,6 +381,13 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
               <p className="text-white/55">assignment: {display.assignment}</p>
               <p className="text-white/55">status: {display.status}</p>
               <p className="font-black text-white/70">{display.passwordLabel}</p>
+              {account.role === 'referee' ? <fieldset className="mt-2 grid gap-2 border-0 p-0" disabled={savingAssignments === account.id}>
+                <legend className="mb-1 text-xs font-black uppercase text-white/45">Campi assegnati</legend>
+                {tournament.courts.map((court) => <label key={court.id} className="flex items-center gap-2 text-white/70">
+                  <input type="checkbox" checked={(account.courtIds ?? (account.courtId ? [account.courtId] : [])).includes(court.id)} onChange={(event) => void toggleRefereeCourt(account, court.id, event.target.checked)} />
+                  {court.name}
+                </label>)}
+              </fieldset> : null}
               <button type="button" className="mt-2 w-fit rounded border border-white/10 px-3 py-2 text-xs font-black text-white/35" disabled>
                 {display.resetLabel}
               </button>

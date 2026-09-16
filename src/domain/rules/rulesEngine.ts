@@ -19,6 +19,11 @@ export function normalizePair(playerAId: string, playerBId: string) {
   return [playerAId, playerBId].sort().join('::')
 }
 
+export function isSamePair(first: readonly string[], second: readonly string[]) {
+  return first.length === 2 && second.length === 2
+    && normalizePair(first[0], first[1]) === normalizePair(second[0], second[1])
+}
+
 type LineupPairCandidate = { activePlayerIds: readonly string[] }
 
 export function isPairAlreadyUsed(candidateLineup: LineupPairCandidate, previousLineups: LineupPairCandidate[]) {
@@ -56,6 +61,10 @@ export function validateMatchLineup({
 }) {
   const playerIds = new Set(roster.map((player) => player.id))
   const activePlayerIds = candidate.activePlayerIds
+
+  if (roster.length !== 3 || playerIds.size !== 3) {
+    return { valid: false, reason: 'La rosa ufficiale deve contenere esattamente 3 giocatori.' }
+  }
 
   if (activePlayerIds.length !== 2) {
     return { valid: false, reason: 'La lineup deve contenere esattamente 2 giocatori.' }

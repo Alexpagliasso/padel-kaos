@@ -38,8 +38,8 @@ export function EventPresentationOverlay({
         exit={{ opacity: 0 }}
         className={
           fullscreen
-            ? 'fixed inset-0 z-50 grid place-items-center bg-[#FFD000] p-6 text-center text-black'
-            : 'rounded border border-[#FFD000]/40 bg-[#FFD000]/10 p-5 text-white'
+            ? 'fixed inset-0 z-50 grid place-items-center bg-[var(--event-primary)] p-6 text-center text-black'
+            : 'rounded border border-[var(--event-primary)]/40 bg-[var(--event-primary)]/10 p-5 text-white'
         }
       >
         <div className="max-w-4xl text-center">
@@ -62,7 +62,7 @@ function getPresentation(event: DemoEvent) {
     return {
       icon: Trophy,
       kicker: 'Por Tres winner',
-      title: String(event.payload.playerName ?? 'Winner'),
+      title: String(event.payload.playerName ?? 'Vincitore'),
       body: `${String(event.payload.teamName ?? '')} wins ${String(event.payload.prize ?? 'the prize')}`,
     }
   }
@@ -71,7 +71,7 @@ function getPresentation(event: DemoEvent) {
       icon: Megaphone,
       kicker: 'Por Tres challenge',
       title: 'First Por Tres wins',
-      body: String(event.payload.prize ?? 'Prize active'),
+      body: String(event.payload.prize ?? 'Premio attivo'),
     }
   }
   if (event.type === 'DICE_ROLLED') {
@@ -87,13 +87,13 @@ function getPresentation(event: DemoEvent) {
       icon: Bolt,
       kicker: 'Card played',
       title: String(event.payload.cardName ?? 'Special card'),
-      body: String(event.payload.teamName ?? 'Team'),
+      body: String(event.payload.teamName ?? 'Squadra'),
     }
   }
   return {
     icon: Crown,
     kicker: event.type,
-    title: 'Live event',
+    title: 'Evento in corso',
     body: '',
   }
 }

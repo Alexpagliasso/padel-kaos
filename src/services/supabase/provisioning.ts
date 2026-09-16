@@ -2,6 +2,7 @@ import { requireSupabase } from './client'
 import { getAuthTournamentSlug } from '../../features/auth/authIdentity'
 import type { ExistingProvisionedAccount } from '../../features/auth/accessManagementState'
 import type { ProvisionableRole } from '../../features/auth/authIdentity'
+import type { Court } from '../../shared/types/domain'
 
 export type ProvisionTournamentUserInput = {
   tournamentId: string
@@ -23,25 +24,35 @@ export type ProvisionedCredential = {
   teamName?: string
 }
 
+export class RefereeProvisioningError extends Error {
+  readonly createdCredentials: ProvisionedCredential[]
+
+  constructor(message: string, createdCredentials: ProvisionedCredential[]) {
+    super(message)
+    this.name = 'RefereeProvisioningError'
+    this.createdCredentials = createdCredentials
+  }
+}
+
 export function getProvisioningErrorMessage(error: unknown) {
-  if (!error) return 'Provisioning failed'
+  if (!error) return 'Impossibile creare le credenziali.'
   const message = error instanceof Error ? error.message : String(error)
   const normalized = message.toLowerCase()
 
   if (normalized.includes('failed to fetch') || normalized.includes('function') || normalized.includes('404')) {
-    return 'Provisioning service unavailable'
+    return 'Servizio di creazione credenziali non disponibile.'
   }
   if (normalized.includes('already') || normalized.includes('duplicate') || normalized.includes('unique')) {
-    return 'Username or profile already exists'
+    return 'Il nome utente o il profilo esiste già.'
   }
   if (normalized.includes('not authenticated') || normalized.includes('jwt')) {
-    return 'Admin session required'
+    return 'È richiesta una sessione amministratore valida.'
   }
   if (normalized.includes('not authorized')) {
-    return 'Admin role required'
+    return 'Non sei autorizzato a creare credenziali per questo torneo.'
   }
 
-  return message || 'Provisioning failed'
+  return message || 'Impossibile creare le credenziali.'
 }
 
 async function getFunctionInvokeErrorMessage(error: unknown) {
@@ -71,6 +82,7 @@ export async function provisionTournamentUser(input: ProvisionTournamentUserInpu
   const { data, error } = await client.functions.invoke<ProvisionedCredential>(
     'provision-tournament-user',
     {
+      headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
       body: {
         ...input,
         password: input.password || undefined,
@@ -93,6 +105,7 @@ export async function provisionTeamAccounts(input: {
   if (!sessionData.session) throw new Error('Admin session required')
 
   const { data, error } = await client.functions.invoke<{ credentials: ProvisionedCredential[] }>('provision-tournament-user', {
+    headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
     body: {
       tournamentId: input.tournamentId,
       tournamentSlug: getAuthTournamentSlug(),
@@ -111,25 +124,98 @@ export async function provisionTeamAccounts(input: {
   }))
 }
 
+export function getMissingRefereeCourts(courts: Court[], accounts: ExistingProvisionedAccount[]) {
+  const coveredCourtIds = new Set(accounts
+    .filter((account) => account.role === 'referee')
+    .flatMap((account) => account.courtIds ?? (account.courtId ? [account.courtId] : [])))
+  return [...courts]
+    .sort((left, right) => left.name.localeCompare(right.name, 'it', { numeric: true }) || left.id.localeCompare(right.id))
+    .filter((court) => !coveredCourtIds.has(court.id))
+}
+
+export async function provisionMissingRefereeAccounts(input: {
+  tournamentId: string
+  courts: Court[]
+  accounts: ExistingProvisionedAccount[]
+  provision?: typeof provisionTournamentUser
+}) {
+  const provision = input.provision ?? provisionTournamentUser
+  const orderedCourts = [...input.courts]
+    .sort((left, right) => left.name.localeCompare(right.name, 'it', { numeric: true }) || left.id.localeCompare(right.id))
+  const missingCourts = getMissingRefereeCourts(orderedCourts, input.accounts)
+  const usedUsernames = new Set(input.accounts.map((account) => account.username.trim().toLowerCase()))
+  const credentials: ProvisionedCredential[] = []
+
+  for (const court of missingCourts) {
+    const courtNumber = orderedCourts.findIndex((candidate) => candidate.id === court.id) + 1
+    const displayName = `Arbitro ${courtNumber}`
+    const baseUsername = `arbitro${courtNumber}`
+    let suffix = 1
+
+    while (suffix <= 100) {
+      const candidate = suffix === 1 ? baseUsername : `${baseUsername}-${suffix}`
+      suffix += 1
+      if (usedUsernames.has(candidate)) continue
+      try {
+        const credential = await provision({
+          tournamentId: input.tournamentId,
+          username: candidate,
+          role: 'referee',
+          courtId: court.id,
+          teamName: displayName,
+        })
+        credentials.push({ ...credential, teamName: credential.teamName ?? displayName, courtId: credential.courtId ?? court.id })
+        usedUsernames.add(candidate)
+        break
+      } catch (error) {
+        if (isUsernameCollision(error)) continue
+        throw new RefereeProvisioningError(getProvisioningErrorMessage(error), credentials)
+      }
+    }
+
+    if (!credentials.some((credential) => credential.courtId === court.id)) {
+      throw new RefereeProvisioningError(`Impossibile trovare un nome utente disponibile per ${displayName}.`, credentials)
+    }
+  }
+
+  return credentials
+}
+
 export async function listTournamentProvisionedAccounts(tournamentId: string) {
   const client = requireSupabase()
-  const { data, error } = await client
-    .from('profiles')
-    .select('id,role,username,display_name,team_id,court_id')
-    .eq('tournament_id', tournamentId)
-    .neq('role', 'admin')
-    .order('role', { ascending: true })
-    .order('username', { ascending: true })
+  const [profilesResult, assignmentsResult] = await Promise.all([
+    client.from('profiles').select('id,role,username,display_name,team_id,court_id')
+      .eq('tournament_id', tournamentId).neq('role', 'admin')
+      .order('role', { ascending: true }).order('username', { ascending: true }),
+    client.from('referee_court_assignments').select('referee_user_id,court_id').eq('tournament_id', tournamentId),
+  ])
 
-  if (error) throw error
-  return (data ?? []).map((row) => ({
+  if (profilesResult.error) throw profilesResult.error
+  if (assignmentsResult.error) throw assignmentsResult.error
+  return (profilesResult.data ?? []).map((row) => ({
     id: row.id,
     role: row.role,
     username: row.username,
     displayName: row.display_name,
     teamId: row.team_id,
     courtId: row.court_id,
+    courtIds: (assignmentsResult.data ?? []).filter((assignment) => assignment.referee_user_id === row.id).map((assignment) => assignment.court_id),
   })) as ExistingProvisionedAccount[]
+}
+
+export async function replaceRefereeCourtAssignments(refereeUserId: string, courtIds: string[]) {
+  const { error } = await requireSupabase().rpc('replace_referee_court_assignments', {
+    p_referee_user_id: refereeUserId,
+    p_court_ids: courtIds,
+  })
+  if (error) throw new Error(getProvisioningErrorMessage(error))
+}
+
+export async function listMyRefereeCourtIds(tournamentId: string, refereeUserId: string) {
+  const { data, error } = await requireSupabase().from('referee_court_assignments').select('court_id')
+    .eq('tournament_id', tournamentId).eq('referee_user_id', refereeUserId).order('created_at')
+  if (error) throw error
+  return (data ?? []).map((row) => row.court_id)
 }
 
 export async function cleanupTournamentAuthUsers(tournamentId: string) {
@@ -155,4 +241,9 @@ export function credentialsToCsv(credentials: ProvisionedCredential[]) {
 
 function escapeCsv(value: string) {
   return `"${value.replaceAll('"', '""')}"`
+}
+
+function isUsernameCollision(error: unknown) {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase()
+  return message.includes('already') || message.includes('duplicate') || message.includes('unique') || message.includes('esiste gi')
 }

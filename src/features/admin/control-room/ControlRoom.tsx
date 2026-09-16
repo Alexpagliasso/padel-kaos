@@ -1,102 +1,62 @@
-import { RadioTower } from 'lucide-react'
-import { useTournament } from '../../tournament/useTournament'
-import { useEventRepository } from '../../../repositories/eventRepository'
-import { useMatchRepository } from '../../../repositories/matchRepository'
+import { Alert, Box, Chip, Paper, Stack, Typography } from '@mui/material'
+import { PageShell, SectionHeader, EmptyState, StatusChip } from '../../../shared/components/Foundation'
+import { formatStatusLabel } from '../../../shared/lib/uiLabels'
 import type { Tournament } from '../../../shared/types/domain'
-import { AdminPageState } from '../dashboard/AdminDashboard'
-import { EventManagementPanel } from './EventManagementPanel'
-import { FieldStatusCard } from './FieldStatusCard'
-import { GlobalKaosPanel } from './GlobalKaosPanel'
-import { SpecialEventsPanel } from './SpecialEventsPanel'
+import { useAdminWorkspace } from '../workspace/useAdminWorkspace'
+import { entryFromTournament, useWorkspaceStore, type WorkspaceEntry } from '../workspace/workspaceStore'
+import { MatchReportCard } from '../reports/MatchReportCard'
+import { OperationsControls } from './OperationsControls'
 import { getControlRoomRound, getCurrentRoundMatches } from './controlRoomState'
 
 export function ControlRoom() {
-  const { data: tournament, error, isLoading } = useTournament()
-  const matchRepo = useMatchRepository()
-  const eventRepo = useEventRepository()
-
-  if (isLoading) return <AdminPageState title="Loading control room" />
-  if (error) return <AdminPageState title="Unable to load control room" detail={error} tone="error" />
-
-  return (
-    <ControlRoomContent
-      tournament={tournament}
-      porTresPrizeDraft={eventRepo.porTresPrizeDraft}
-      onPorTresPrizeChange={eventRepo.setPorTresPrizeDraft}
-      onActivatePorTres={eventRepo.activatePorTres}
-      onRollGlobalDice={matchRepo.rollKaosDice}
-    />
-  )
+  const workspace = useAdminWorkspace()
+  if (!workspace.entry) return <PageShell><EmptyState title="Seleziona o crea un torneo" /></PageShell>
+  if (workspace.isLoading && !workspace.entry.local) return <PageShell><EmptyState title="Caricamento regia" /></PageShell>
+  if (workspace.error && !workspace.entry.local) return <PageShell><EmptyState title="Impossibile caricare la regia" detail={workspace.error} /></PageShell>
+  return <ControlRoomContent key={workspace.data.id} tournament={workspace.data} entry={workspace.entry} />
 }
-
-export function ControlRoomContent({
-  tournament,
-  porTresPrizeDraft,
-  onPorTresPrizeChange,
-  onActivatePorTres,
-  onRollGlobalDice,
-}: {
-  tournament: Tournament
-  porTresPrizeDraft: string
-  onPorTresPrizeChange: (value: string) => void
-  onActivatePorTres: (prize: string) => void
-  onRollGlobalDice: (matchId: string) => void
+export function ControlRoomContent({ tournament, entry: providedEntry }: {
+  tournament: Tournament; entry?: WorkspaceEntry
+  porTresPrizeDraft?: string; onPorTresPrizeChange?: (value: string) => void
+  onActivatePorTres?: (prize: string) => void; onRollGlobalDice?: (matchId: string) => void
 }) {
-  const currentRound = getControlRoomRound(tournament)
-  const matches = getCurrentRoundMatches(tournament, currentRound)
-  const isLive = tournament.status === 'live' || matches.some((match) => match.status !== 'scheduled' && match.status !== 'ready' && match.status !== 'completed')
-
-  return (
-    <main className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-6 xl:grid-cols-[1fr_360px]">
-      <section className="space-y-5">
-        <header className="rounded border border-white/10 bg-[#171717] p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FFD000]">PADEL KAOS</p>
-              <h1 className="mt-2 text-3xl font-black md:text-5xl">{tournament.name}</h1>
-              <p className="mt-2 text-sm font-bold uppercase text-white/50">
-                {currentRound ? currentRound.name : 'No round configured'} · {tournament.status ?? 'unknown'}
-              </p>
-            </div>
-            {isLive ? (
-              <p className="rounded bg-[#38E078]/15 px-3 py-2 font-black text-[#38E078]">
-                <span className="mr-2 inline-block size-2 rounded-full bg-[#38E078]" />
-                LIVE
-              </p>
-            ) : null}
-          </div>
-        </header>
-
-        <section>
-          <div className="mb-3 flex items-center gap-2">
-            <RadioTower className="size-5 text-[#FFD000]" />
-            <h2 className="text-xl font-black">Field Status</h2>
-          </div>
-          {matches.length === 0 ? (
-            <p className="rounded border border-white/10 bg-[#171717] p-5 text-sm font-bold text-white/60">No matches configured</p>
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {matches.map((match) => <FieldStatusCard key={match.id} match={match} tournament={tournament} />)}
-            </div>
-          )}
-        </section>
-      </section>
-
-      <aside className="space-y-5">
-        <GlobalKaosPanel
-          tournament={tournament}
-          round={currentRound}
-          matches={matches}
-          onRollGlobalDice={onRollGlobalDice}
-        />
-        <SpecialEventsPanel
-          tournament={tournament}
-          prizeDraft={porTresPrizeDraft}
-          onPrizeChange={onPorTresPrizeChange}
-          onActivatePorTres={onActivatePorTres}
-        />
-        <EventManagementPanel />
-      </aside>
-    </main>
-  )
+  const state = useWorkspaceStore()
+  const entry = providedEntry ?? state.entries[tournament.id] ?? entryFromTournament(tournament)
+  const round = getControlRoomRound(tournament)
+  const matches = getCurrentRoundMatches(tournament, round)
+  const reports = state.reports.filter(report => report.tournamentId === tournament.id)
+  const waiting = matches.filter(match => match.status === 'completed' && !reports.some(report => report.matchId === match.id))
+  const flagged = reports.filter(report => report.status === 'review')
+  return <PageShell>
+    <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 2 }}><SectionHeader eyebrow="Regia / Gestione evento" title={tournament.name} detail={round?.name ?? 'Nessun turno configurato'} /><StatusChip label={entry.config.status} /></Stack>
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 1fr) 360px' }, gap: 3 }}>
+      <Stack spacing={3} sx={{ minWidth: 0 }}>
+        <Paper sx={{ p: 3 }}><Typography variant="h3" sx={{ mb: 2 }}>Avvisi</Typography>
+          <Stack spacing={1}>
+            {waiting.length > 0 && <Alert severity="warning">{waiting.length} partite completate in attesa del report arbitrale.</Alert>}
+            {flagged.length > 0 && <Alert severity="warning">{flagged.length} report partita segnalati per revisione.</Alert>}
+            {!round && <Alert severity="info">Nessun turno configurato</Alert>}
+            {!waiting.length && !flagged.length && round && <Alert severity="success">Nessun avviso operativo.</Alert>}
+          </Stack>
+        </Paper>
+        <Box><Typography variant="h2" sx={{ mb: 2 }}>Stato campi</Typography>
+          {!matches.length && <Alert severity="info" sx={{ mb: 2 }}>Nessuna partita configurata</Alert>}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+            {tournament.courts.map(court => {
+              const courtMatches = matches.filter(match => match.courtId === court.id)
+              return <Paper key={court.id} sx={{ p: 3 }}><Typography color="primary" sx={{ fontWeight: 900, mb: 2 }}>{court.name}</Typography>
+                {!courtMatches.length && <Typography color="text.secondary">Campo disponibile / nessuna partita assegnata</Typography>}
+                {courtMatches.map(match => {
+                  const report = reports.find(item => item.matchId === match.id)
+                  return <Box key={match.id} sx={{ mb: 2 }}><Typography sx={{ fontWeight: 850, mb: 1 }}>{tournament.teams.find(team => team.id === match.teamAId)?.name ?? 'Da definire'} vs {tournament.teams.find(team => team.id === match.teamBId)?.name ?? 'Da definire'}</Typography><Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}><StatusChip label={match.status} /><Chip size="small" label={report ? 'Report / ' + formatStatusLabel(report.status) : match.status === 'completed' ? 'In attesa del report arbitrale' : 'Arbitro / partita in corso'} /></Stack></Box>
+                })}
+              </Paper>
+            })}
+          </Box>
+        </Box>
+        <Box><Typography variant="h2" sx={{ mb: 2 }}>Report finali delle partite</Typography><Stack spacing={3}>{reports.length ? reports.map(report => <MatchReportCard key={report.id} report={report} />) : <EmptyState title="Nessun report partita inviato" detail="Arbitro invia il report finale dopo aver completato la partita." />}</Stack></Box>
+      </Stack>
+      <Box component="aside"><OperationsControls entry={entry} roundId={round?.id} roundName={round?.name} /></Box>
+    </Box>
+  </PageShell>
 }

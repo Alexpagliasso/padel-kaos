@@ -50,6 +50,7 @@ export type TeamSide = 'A' | 'B'
 export type PlayerGender = 'woman' | 'man' | 'non_binary' | 'unspecified'
 
 export type Player = {
+  isTestData?: boolean
   id: string
   teamId: string
   firstName: string
@@ -67,12 +68,16 @@ export type GenderStartingScore = {
   teamB: GenderStartingScoreValue
 }
 
+export type Group = { id: string; name: string; tournamentId?: string; sortOrder?: number; assignedCourtId?: string | null }
+
 export type Team = {
+  isTestData?: boolean
   id: string
   name: string
   shortName: string
   color: string
   groupId: string
+  ranking: number | null
   players: Player[]
 }
 
@@ -82,6 +87,7 @@ export type MatchLineup = {
   phase?: 'set_1' | 'set_2' | 'super_tiebreak'
   activePlayerIds: [string, string]
   benchPlayerId: string
+  confirmedAt?: string
 }
 
 export type ScoreState = {
@@ -96,6 +102,7 @@ export type CardDefinition = {
   name: string
   slug: string
   description: string
+  longDescription?: string | null
   category: 'bonus' | 'malus' | 'kaos'
   target: 'own_team' | 'opponent' | 'match' | 'global'
   activationTiming: 'before_point' | 'between_games' | 'set_break' | 'anytime'
@@ -106,6 +113,10 @@ export type CardDefinition = {
   canBeStolen?: boolean
   isGlobal: boolean
   enabled: boolean
+  tournamentId?: string | null
+  imageUrl?: string | null
+  archivedAt?: string | null
+  updatedAt?: string | null
 }
 
 export type TeamCard = {
@@ -206,9 +217,20 @@ export type GlobalEvent = {
 export type Tournament = {
   id: string
   name: string
+  /** Persisted setup values remain nullable for legacy/unconfigured tournaments. */
+  teamsCount?: number | null
+  teamsPerGroup?: number | null
+  goldQualifiedCount?: number | null
+  silverQualifiedCount?: number | null
+  courtsCount?: number | null
+  allowByes?: boolean | null
+  themePreset?: 'white' | 'blue' | 'orange' | 'green' | 'custom' | null
+  themeColor?: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
   phase?: TournamentPhase
   status?: 'draft' | 'configured' | 'live' | 'completed' | 'archived'
-  groups: { id: string; name: string }[]
+  groups: Group[]
   courts: Court[]
   rounds?: Round[]
   teams: Team[]
