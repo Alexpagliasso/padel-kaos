@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-label="PALLINE TENNIS">
+<defs><radialGradient id="g"><stop stop-color="#143d56"/><stop offset="1" stop-color="#050a12"/></radialGradient><linearGradient id="line" x2="1" y2="1"><stop stop-color="#8be8ff"/><stop offset="1" stop-color="#236989"/></linearGradient></defs>
+<rect width="1200" height="720" fill="url(#g)"/><rect x="28" y="28" width="1144" height="664" rx="42" fill="none" stroke="#66cfff" stroke-opacity=".65" stroke-width="3"/>
+<circle cx="600" cy="326" r="225" fill="none" stroke="url(#line)" stroke-width="2" opacity=".55"/><circle cx="600" cy="326" r="170" fill="none" stroke="#82dfff" stroke-width="3" opacity=".22"/>
+<path d="M180 326h225m390 0h225M600 60v80m0 372v80" stroke="#8be8ff" stroke-opacity=".5" stroke-width="3"/>
+<text x="600" y="370" fill="#e8faff" font-family="Arial,sans-serif" font-size="190" font-weight="900" text-anchor="middle">04</text>
+<text x="600" y="572" fill="#ffffff" font-family="Arial,sans-serif" font-size="62" font-weight="900" text-anchor="middle">PALLINE TENNIS</text>
+<text x="600" y="640" fill="#8be8ff" font-family="Arial,sans-serif" font-size="26" font-weight="700" letter-spacing="8" text-anchor="middle">CAMBIO</text>
+</svg>

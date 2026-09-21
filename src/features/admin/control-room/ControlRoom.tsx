@@ -11,8 +11,11 @@ import { SetTimer } from '../../../shared/components/SetTimer'
 import { useSharedClock } from '../../../shared/hooks/useSharedClock'
 import { getSetTimer } from '../../../domain/live/setTimer'
 import { formatStatusLabel } from '../../../shared/lib/uiLabels'
-import { CardPlayNotification, GlobalDiceReveal } from '../../../shared/components/LiveEffects'
+import { CardPlayNotification } from '../../../shared/components/LiveEffects'
+import { GlobalDiceReveal } from '../../../shared/components/GlobalDiceReveal'
 import { LiveEventPresenter } from '../../../shared/components/LiveEventPresenter'
+import { RefereeCourtAssignmentsPanel } from './RefereeCourtAssignmentsPanel'
+import { dataProvider } from '../../../repositories'
 
 type RegiaTab = 'overview' | 'turn' | 'live' | 'settings'
 
@@ -53,7 +56,7 @@ export function ControlRoomContent({ tournament, entry: providedEntry, referees 
     matches.forEach(match=>{const timer=getSetTimer(match,now);const key=`${match.id}:${timer?.setNumber??0}`;if(!timer?.expired||expiryRequests.current.has(key))return;expiryRequests.current.add(key);void live.expireSet(match.id).catch(()=>expiryRequests.current.delete(key))})
   },[live,matches,now])
   return <PageShell>
-    <GlobalDiceReveal tournament={tournament}/><CardPlayNotification tournament={tournament}/><LiveEventPresenter tournament={tournament} audience="admin"/>
+    <GlobalDiceReveal tournament={tournament} audience="admin"/><CardPlayNotification tournament={tournament} audience="admin"/><LiveEventPresenter tournament={tournament} audience="admin"/>
     <Stack direction={{xs:'column',md:'row'}} sx={{justifyContent:'space-between',gap:2}}><SectionHeader eyebrow="Regia" title={tournament.name} detail={round?.name??'Nessun turno configurato'}/><StatusChip label={entry.config.status}/></Stack>
     <Paper sx={{mb:3}}><Tabs value={tab} onChange={(_,value)=>setTab(value)} variant="scrollable" scrollButtons="auto" aria-label="Sezioni Regia"><Tab value="overview" label="PANORAMICA"/><Tab value="turn" label="TURNO"/><Tab value="live" label="LIVE"/><Tab value="settings" label="IMPOSTAZIONI"/></Tabs></Paper>
     {feedback&&<Alert severity={feedback.includes('non')?'error':'success'} sx={{mb:2}}>{feedback}</Alert>}
@@ -64,6 +67,7 @@ export function ControlRoomContent({ tournament, entry: providedEntry, referees 
     </Stack>}
     {tab==='turn'&&<Stack spacing={3}>
       <OperationsControls section="turn" entry={entry} tournament={tournament} matches={matches} roundId={round?.id} roundName={round?.name}/>
+      {dataProvider === 'supabase' && <RefereeCourtAssignmentsPanel tournament={tournament} />}
       <Box><Typography variant="h2" sx={{mb:2}}>CAMPI</Typography>{!matches.length&&<Alert severity="info">Nessuna partita configurata</Alert>}<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 1fr'},gap:2}}>{matches.map(match=><CourtCard key={match.id} tournament={tournament} match={match} referee={referees.find(item=>item.courtId===match.courtId)?.name} intervention={intervention===match.id} onToggle={()=>setIntervention(value=>value===match.id?'':match.id)} onAction={(action)=>{if(!window.confirm('Confermare l’intervento eccezionale della Regia?'))return;void run(()=>live.adminControlMatch(match.id,action),'Intervento Regia completato.')}} pending={live.isPending} cardsReady={cardsReady}/>)}</Box></Box>
     </Stack>}
     {tab==='live'&&<OperationsControls section="live" entry={entry} tournament={tournament} matches={matches} roundId={round?.id} roundName={round?.name}/>}

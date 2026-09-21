@@ -10,10 +10,10 @@ export type SetControlMode = 'centralized' | 'referee'
 export type SetAction = 'start_set_1' | 'end_set_1' | 'start_set_2' | 'end_set_2'
 export type OperationalSettings = { refereeCanManageScore:boolean;refereeCanValidateCards:boolean;refereeCanReportEventWinner:boolean;cardsEnabled:boolean;diceEnabled:boolean;specialEventsEnabled:boolean }
 
-export function useLiveOrchestrationRepository(tournamentId: string) {
+export function useLiveOrchestrationRepository(tournamentId: string, subscribe = true) {
   const queryClient = useQueryClient()
   useEffect(() => {
-    if (dataProvider !== 'supabase' || !tournamentId) return
+    if (!subscribe || dataProvider !== 'supabase' || !tournamentId) return
     const client=requireSupabase();const refresh=()=>{void queryClient.invalidateQueries({queryKey:supabaseTournamentKeys.detail(tournamentId)})}
     const channel=client.channel(`live-orchestration:${tournamentId}:${crypto.randomUUID()}`)
       .on('postgres_changes',{event:'*',schema:'public',table:'matches',filter:`tournament_id=eq.${tournamentId}`},refresh)
@@ -27,11 +27,14 @@ export function useLiveOrchestrationRepository(tournamentId: string) {
       .on('postgres_changes',{event:'*',schema:'public',table:'global_event_winner_reports',filter:`tournament_id=eq.${tournamentId}`},refresh)
       .subscribe()
     return ()=>{void client.removeChannel(channel)}
-  },[queryClient,tournamentId])
+  },[queryClient,tournamentId,subscribe])
   const mutation = useMutation({
     mutationFn: async ({ rpc, args }: { rpc: string; args: Record<string, unknown> }) => {
       const { data, error } = await requireSupabase().rpc(rpc, args)
-      if (error) throw new Error(mapLiveError(error.message), { cause: error })
+      if (error) {
+        if (import.meta.env.DEV) console.error('Live RPC failed', { rpc, code: error.code, message: error.message, details: error.details, hint: error.hint })
+        throw new Error(mapLiveError(error.message), { cause: error })
+      }
       return data
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: supabaseTournamentKeys.detail(tournamentId) }),
@@ -63,6 +66,12 @@ export function useLiveOrchestrationRepository(tournamentId: string) {
 }
 
 export function mapLiveError(message: string) {
+  if (message.includes('invalid input syntax for type uuid')) return 'Correzione non riuscita per un errore nei dati. Contatta la Regia tecnica.'
+  if (message.includes('authoritative dice faces are not configured')) return 'Le sei facce del dado non sono configurate per questo torneo. Contatta la Regia tecnica.'
+  if (message.includes('invalid corrected result')) return 'Inserisci punteggi validi e diversi per la correzione.'
+  if (message.includes('super tie-break is not required')) return 'Il Super Tie-Break non è richiesto per questa partita.'
+  if (message.includes('normal set results are missing')) return 'Completa prima i risultati dei due set.'
+  if (message.includes('set is not submitted')) return 'Il risultato del set non è ancora stato inviato.'
   if (message.includes('round cards incomplete')) return 'ASSEGNA LE CARTE PRIMA DI AVVIARE IL TURNO.'
   if (message.includes('previous round incomplete')) return 'Il turno successivo è bloccato: completa tutte le partite del turno precedente.'
   if (message.includes('duration is locked')) return 'NON MODIFICABILE DURANTE IL SET.'

@@ -103,7 +103,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
       const latest = current(entry)
       const { config } = latest
       if (action === 'delete') {
-        if (config.status !== 'completed' || confirmation !== `DELETE ${config.name}`) return false
+        if (config.started || !['draft', 'ready'].includes(config.status) || confirmation !== config.name) return false
         set(state => ({ deletedIds: [...state.deletedIds, entry.domain.id], selectedId: null,
           entries: Object.fromEntries(Object.entries(state.entries).filter(([id]) => id !== entry.domain.id)),
           reports: state.reports.filter(report => report.tournamentId !== entry.domain.id) }))

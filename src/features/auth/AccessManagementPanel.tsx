@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Dialog, DialogActions, DialogContent, DialogTitle, Button } from '@mui/material'
 import { Copy, Download, KeyRound, UsersRound } from 'lucide-react'
 import {
   credentialsToCsv,
   getProvisioningErrorMessage,
   getMissingRefereeCourts,
   listTournamentProvisionedAccounts,
-  provisionMissingRefereeAccounts,
-  provisionTeamAccounts,
+  provisionTournamentOperationalAccounts,
+  STANDARD_TEST_PASSWORD,
+  type TournamentProvisioningResult,
   provisionTournamentUser,
-  RefereeProvisioningError,
   replaceRefereeCourtAssignments,
   type ProvisionedCredential,
 } from '../../services/supabase/provisioning'
@@ -43,6 +44,8 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
   const [accountsLoading, setAccountsLoading] = useState(isSupabaseProvider())
   const [loading, setLoading] = useState(false)
   const [savingAssignments, setSavingAssignments] = useState('')
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false)
+  const [bulkResult, setBulkResult] = useState<TournamentProvisioningResult | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -81,13 +84,31 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
     () => tournament.teams.filter((team) => !findTeamAccount(accounts, team.id)),
     [accounts, tournament.teams],
   )
-  const refereeAccounts = useMemo(() => accounts.filter((account) => account.role === 'referee' && account.courtId), [accounts])
+  const refereeAccounts = useMemo(() => accounts.filter((account) => account.role === 'referee'), [accounts])
   const missingRefereeCourts = useMemo(
     () => getMissingRefereeCourts(tournament.courts, accounts),
     [accounts, tournament.courts],
   )
   const canCreate = !singleInputError && !loading
-  const canBulkCreate = teamsWithoutAccounts.length > 0 && !loading && !accountsLoading && !accountsError
+
+  async function createTournamentAccounts() {
+    setBulkDialogOpen(false)
+    setLoading(true)
+    setError('')
+    setMessage('')
+    setBulkResult(null)
+    try {
+      const latest = await listTournamentProvisionedAccounts(tournament.id)
+      const result = await provisionTournamentOperationalAccounts({ tournamentId: tournament.id,
+        teams: tournament.teams, courts: tournament.courts, accounts: latest })
+      setBulkResult(result)
+      setLastCredentials([...result.teams.created, ...result.referees.created])
+      await refreshAccounts()
+      setMessage('Provisioning completato. Salva le nuove credenziali prima di uscire.')
+    } catch (caughtError) {
+      setError(getProvisioningErrorMessage(caughtError))
+    } finally { setLoading(false) }
+  }
 
   async function createLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -126,60 +147,9 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
     }
   }
 
-  async function createBulkTeamLogins() {
-    setMessage('')
-    setError('')
-    setCopyMessage('')
-    setLoading(true)
-    try {
-      const credentials = await provisionTeamAccounts({
-        tournamentId: tournament.id,
-        teams: teamsWithoutAccounts.map((team) => ({ id: team.id, name: team.name, shortName: team.shortName })),
-      })
-      setLastCredentials(credentials)
-      setMessage(`Creati ${credentials.length} account. Salva subito il file: le password non potranno essere recuperate.`)
-      await refreshAccounts()
-    } catch (caughtError) {
-      setLastCredentials([])
-      setError(getProvisioningErrorMessage(caughtError))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function createMissingReferees() {
-    setMessage('')
-    setError('')
-    setCopyMessage('')
-    setLoading(true)
-    try {
-      const credentials = await provisionMissingRefereeAccounts({
-        tournamentId: tournament.id,
-        courts: tournament.courts,
-        accounts,
-      })
-      setLastCredentials(credentials)
-      setMessage(credentials.length
-        ? `Creati ${credentials.length} account arbitro. Salva subito le password temporanee.`
-        : 'Tutti i campi hanno già un arbitro configurato.')
-      await refreshAccounts()
-    } catch (caughtError) {
-      const createdCredentials = caughtError instanceof RefereeProvisioningError ? caughtError.createdCredentials : []
-      setLastCredentials(createdCredentials)
-      setError(caughtError instanceof Error ? caughtError.message : 'Impossibile generare gli arbitri mancanti.')
-      try { await refreshAccounts() } catch { /* Preserve the provisioning error and returned credentials. */ }
-    } finally {
-      setLoading(false)
-    }
-  }
-
   async function toggleRefereeCourt(account: ExistingProvisionedAccount, courtId: string, checked: boolean) {
     const current = account.courtIds ?? (account.courtId ? [account.courtId] : [])
     const next = checked ? [...new Set([...current, courtId])] : current.filter((id) => id !== courtId)
-    if (!next.length) { setError('Ogni arbitro deve mantenere almeno un campo assegnato.'); return }
-    const owner = accounts.find((candidate) => candidate.role === 'referee' && candidate.id !== account.id
-      && (candidate.courtIds ?? (candidate.courtId ? [candidate.courtId] : [])).includes(courtId))
-    if (checked && owner) { setError(`${tournament.courts.find((court) => court.id === courtId)?.name ?? 'Il campo'} è già assegnato a ${owner.displayName}.`); return }
     setSavingAssignments(account.id); setError(''); setMessage('')
     try {
       await replaceRefereeCourtAssignments(account.id, next)
@@ -302,7 +272,7 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
         {singleInputError ? <p className="text-xs font-bold text-white/45">{singleInputError}</p> : null}
         <button type="submit" className="inline-flex items-center justify-center gap-2 rounded bg-white px-3 py-3 font-black text-black disabled:opacity-50" disabled={!canCreate}>
           <KeyRound className="size-4" />
-          {loading ? 'Creazione account…' : 'Crea accesso'}
+          {loading ? 'Creazione accountâ€¦' : 'Crea accesso'}
         </button>
       </form>
 
@@ -313,22 +283,35 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
           <p>{refereeAccounts.length} arbitri configurati</p>
           <p>{missingRefereeCourts.length} arbitri mancanti</p>
         </div>
-        <button type="button" className="inline-flex items-center justify-center gap-2 rounded bg-[var(--event-primary)] px-3 py-3 font-black text-black disabled:opacity-50" disabled={loading || accountsLoading || Boolean(accountsError) || missingRefereeCourts.length === 0} onClick={() => void createMissingReferees()}>
-          <UsersRound className="size-4" />
-          {loading ? 'Generazione arbitri…' : 'Genera arbitri mancanti'}
-        </button>
       </div>
 
       <div className="mt-5 grid gap-3 border-t border-white/10 pt-4">
-        <p className="text-xs font-black uppercase tracking-[0.18em] text-white/40">Bulk team provisioning</p>
-        <p className="text-sm font-bold text-white/55">
-          {teamsWithoutAccounts.length} teams without accounts.
-        </p>
-        <button className="inline-flex items-center justify-center gap-2 rounded bg-[var(--event-primary)] px-3 py-3 font-black text-black disabled:opacity-50" disabled={!canBulkCreate} onClick={createBulkTeamLogins}>
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-white/40">Account torneo</p>
+        <p className="text-sm font-bold text-white/55">{teamsWithoutAccounts.length} squadre e {missingRefereeCourts.length} campi senza accesso arbitro.</p>
+        <button type="button" className="inline-flex items-center justify-center gap-2 rounded bg-[var(--event-primary)] px-3 py-3 font-black text-black disabled:opacity-50" disabled={loading || accountsLoading || Boolean(accountsError) || teamsWithoutAccounts.length + missingRefereeCourts.length === 0} onClick={() => setBulkDialogOpen(true)}>
           <UsersRound className="size-4" />
-          Genera account squadre
+          CREA ACCOUNT TORNEO
         </button>
       </div>
+
+      <Dialog open={bulkDialogOpen} onClose={() => setBulkDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>CREA ACCOUNT TORNEO</DialogTitle>
+        <DialogContent>
+          <p>Verranno creati: {teamsWithoutAccounts.length} account squadra e {missingRefereeCourts.length} account arbitro.</p>
+          <p>Password iniziale: <strong>{STANDARD_TEST_PASSWORD}</strong></p>
+          <p>Gli account già esistenti saranno conservati.</p>
+        </DialogContent>
+        <DialogActions><Button onClick={() => setBulkDialogOpen(false)}>ANNULLA</Button><Button onClick={() => void createTournamentAccounts()}>CREA ACCOUNT</Button></DialogActions>
+      </Dialog>
+
+      {bulkResult && <div className="mt-4 rounded border border-white/10 bg-black p-4 text-sm">
+        <p className="font-black uppercase text-[var(--event-primary)]">ACCOUNT CREATI</p>
+        <p>Squadre: {bulkResult.teams.created.length} creati, {bulkResult.teams.existing} già esistenti, {bulkResult.teams.failed.length} errori.</p>
+        <p>Arbitri: {bulkResult.referees.created.length} creati, {bulkResult.referees.existing} campi già coperti, {bulkResult.referees.failed.length} errori.</p>
+        {bulkResult.referees.created.map(item => <p key={item.username}>{item.username}</p>)}
+        {[...bulkResult.teams.failed, ...bulkResult.referees.failed].map(item => <p key={item.name} className="text-red-200">{item.name}: {item.reason}</p>)}
+        <p>Password iniziale per i nuovi account: <strong>{STANDARD_TEST_PASSWORD}</strong></p>
+      </div>}
 
       {message ? <p className="mt-3 text-sm font-bold text-white/60">{message}</p> : null}
       {copyMessage ? <p className="mt-3 text-sm font-bold text-[var(--event-primary)]">{copyMessage}</p> : null}
@@ -368,7 +351,7 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
       ) : null}
       <div className="mt-5 grid gap-3 border-t border-white/10 pt-4">
         <p className="text-xs font-black uppercase tracking-[0.18em] text-white/40">Existing accounts</p>
-        {accountsLoading ? <p className="text-sm font-bold text-white/50">Caricamento account…</p> : null}
+        {accountsLoading ? <p className="text-sm font-bold text-white/50">Caricamento accountâ€¦</p> : null}
         {accountsError ? <p className="rounded border border-red-400/40 bg-red-950/20 p-3 text-sm font-bold text-red-100">{accountsError}</p> : null}
         {!accountsLoading && !accountsError && accounts.length === 0 ? <p className="text-sm font-bold text-white/50">Nessun account di test ancora creato.</p> : null}
         {accounts.map((account) => {

@@ -17,7 +17,7 @@ export type ProvisionableRole = z.infer<typeof provisionableRoleSchema>
 
 export const authProfileSchema = z.object({
   id: z.string().min(1),
-  tournament_id: z.string().min(1),
+  tournament_id: z.string().nullable(),
   role: z.enum(['admin', 'referee', 'team', 'court_display', 'main_display']),
   username: z.string().min(1),
   display_name: z.string().min(1),
@@ -28,7 +28,7 @@ export const authProfileSchema = z.object({
 export function mapProfile(row: z.infer<typeof authProfileSchema>): AppProfile {
   return {
     id: row.id,
-    tournamentId: row.tournament_id,
+    tournamentId: row.tournament_id ?? '',
     role: row.role,
     username: row.username,
     displayName: row.display_name,

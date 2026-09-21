@@ -7,14 +7,17 @@ import { useQueryClient } from '@tanstack/react-query'
 import { dataProvider } from '../../repositories'
 import { requireSupabase } from '../../services/supabase/client'
 import { supabaseTournamentKeys } from '../../repositories/supabase/queryKeys'
+import { DICE_DISMISSED_EVENT, openDiceReveal } from '../../domain/live/dicePresentation'
 
-export function LiveEventPresenter({tournament,audience,matchIds,courtId,teamId}:{tournament:Tournament;audience:LiveAudience;matchIds?:string[];courtId?:string;teamId?:string}){
+export function LiveEventPresenter({tournament,audience,matchIds,courtId,teamId,subscribe=true}:{tournament:Tournament;audience:LiveAudience;matchIds?:string[];courtId?:string;teamId?:string;subscribe?:boolean}){
   const [queue,setQueue]=useState<LivePresentation[]>([]);const initialized=useRef(false);const now=useSharedClock();const queryClient=useQueryClient()
+  const [,forceRefresh]=useState(0)
+  useEffect(()=>{const update=()=>forceRefresh(value=>value+1);window.addEventListener(DICE_DISMISSED_EVENT,update);return()=>window.removeEventListener(DICE_DISMISSED_EVENT,update)},[])
   const scopeKey=(matchIds??[]).join(',')
   const candidates=useMemo(()=>buildLivePresentations(tournament,audience,{matchIds,courtId,teamId}),[audience,courtId,scopeKey,teamId,tournament])
-  const diceRevealActive=tournament.rounds?.some(round=>round.diceRolledAt&&now-new Date(round.diceRolledAt).getTime()<5500)??false
+  const diceRevealActive=Boolean(openDiceReveal(tournament,audience,now))
   useEffect(()=>{
-    if(dataProvider!=='supabase'||!tournament.id||tournament.id==='empty-tournament'||tournament.id==='demo-tournament')return
+    if(!subscribe||dataProvider!=='supabase'||!tournament.id||tournament.id==='empty-tournament'||tournament.id==='demo-tournament')return
     const client=requireSupabase();const refresh=()=>{void queryClient.invalidateQueries({queryKey:supabaseTournamentKeys.detail(tournament.id)})}
     const channel=client.channel(`live-presentations:${tournament.id}:${crypto.randomUUID()}`)
       .on('postgres_changes',{event:'*',schema:'public',table:'matches',filter:`tournament_id=eq.${tournament.id}`},refresh)
@@ -24,7 +27,7 @@ export function LiveEventPresenter({tournament,audience,matchIds,courtId,teamId}
       .on('postgres_changes',{event:'*',schema:'public',table:'global_events',filter:`tournament_id=eq.${tournament.id}`},refresh)
       .subscribe()
     return()=>{void client.removeChannel(channel)}
-  },[queryClient,tournament.id])
+  },[queryClient,tournament.id,subscribe])
   useEffect(()=>{
     const keys=candidates.map(item=>`padel-kaos:live-event:${audience}:${item.id}`)
     if(!initialized.current){keys.forEach(key=>sessionStorage.setItem(key,'seen'));initialized.current=true;return}
@@ -40,7 +43,7 @@ export function LiveEventPresenter({tournament,audience,matchIds,courtId,teamId}
     const timer=window.setTimeout(()=>setQueue(items=>items.slice(1)),Math.min(remaining,current.category==='SHOW_EVENT'?9000:6000))
     return()=>window.clearTimeout(timer)
   },[current,diceRevealActive])
-  if(!current||diceRevealActive)return null
+  if(!current||diceRevealActive||now-new Date(current.createdAt).getTime()>=current.expiresAfterMs)return null
   const prominent=current.category==='SHOW_EVENT'||current.category==='ACTION_REQUIRED'
   return <AnimatePresence><motion.aside role="status" aria-live={current.category==='ACTION_REQUIRED'?'assertive':'polite'} className={prominent?'fixed inset-0 z-[2200] grid place-items-center bg-black/90 p-6 text-center text-white':'fixed inset-x-3 top-3 z-[2200] mx-auto max-w-2xl rounded-xl border border-white/20 bg-[#171717]/95 p-4 text-center text-white shadow-2xl'} initial={{opacity:0,y:prominent?0:-18}} animate={{opacity:1,y:0}} exit={{opacity:0}}><div><p className="text-xs font-black uppercase tracking-[.2em] text-[var(--event-primary)]">PADEL KAOS LIVE</p><h2 className={prominent?'mt-3 text-[clamp(2rem,8vw,6rem)] font-black uppercase':'mt-1 text-2xl font-black uppercase'}>{current.title}</h2>{current.detail&&<p className="mx-auto mt-3 max-w-3xl font-bold text-white/70">{current.detail}</p>}</div></motion.aside></AnimatePresence>
 }

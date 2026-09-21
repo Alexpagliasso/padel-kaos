@@ -1,4 +1,5 @@
 import { Alert } from '@mui/material'
+import { useQueryClient } from '@tanstack/react-query'
 import { dataProvider } from '../repositories'
 import { canPreviewAsAdmin } from '../features/admin/preview/previewPolicy'
 import { useAuth } from '../features/auth/authContext'
@@ -23,17 +24,22 @@ import { useEventRepository } from '../repositories/eventRepository'
 import { useMatchRepository } from '../repositories/matchRepository'
 import { useDemoStore } from '../demo/demoStore'
 import { listMyRefereeCourtIds } from '../services/supabase/provisioning'
+import { requireSupabase } from '../services/supabase/client'
+import { supabaseTournamentKeys } from '../repositories/supabase/queryKeys'
+import { refereeCourtStorageKey, resolveRefereeCourt } from './refereeCourtSelection'
 import { LogoutButton } from '../features/auth/LogoutButton'
 import { useLiveOrchestrationRepository, type SetAction } from '../repositories/liveOrchestrationRepository'
 import { useLiveMatchRepository } from '../repositories/liveMatchRepository'
 import type { CardDefinition, Match, Team, TeamCard, Tournament } from '../shared/types/domain'
 import { formatCountdown, getDiceEffect, getPersistedSetResult } from '../domain/live/readiness'
-import { ActiveCardEffects, ActiveDiceIndicator, CardPlayNotification, GlobalDiceReveal } from '../shared/components/LiveEffects'
+import { ActiveCardEffects, ActiveDiceIndicator, CardPlayNotification } from '../shared/components/LiveEffects'
+import { GlobalDiceReveal } from '../shared/components/GlobalDiceReveal'
 import { LiveEventPresenter } from '../shared/components/LiveEventPresenter'
 import { getSetTimer } from '../domain/live/setTimer'
 
 export function RefereeRoute() {
   const { profile, status: authStatus } = useAuth()
+  const queryClient = useQueryClient()
   const readOnlyPreview = dataProvider === 'supabase' && canPreviewAsAdmin(authStatus, profile?.role)
   const { data: tournament, isLoading, error } = useTournament()
   const matchRepo = useMatchRepository()
@@ -42,22 +48,43 @@ export function RefereeRoute() {
   const [porTresPlayerId, setPorTresPlayerId] = useState('')
   const [feedback, setFeedback] = useState('')
   const [assignedCourtIds, setAssignedCourtIds] = useState<string[]>([])
+  const assignedCourtIdsRef = useRef<string[]>([])
   const [assignedCourtsLoading, setAssignedCourtsLoading] = useState(false)
+  const [assignmentError, setAssignmentError] = useState('')
   const logoutAction = profile?.role === 'referee' ? <LogoutButton minimal /> : undefined
 
   useEffect(() => {
     if (dataProvider !== 'supabase' || profile?.role !== 'referee') return
     let active = true
+    let latestRequest = 0
     setAssignedCourtsLoading(true)
-    listMyRefereeCourtIds(profile.tournamentId, profile.id)
-      .then((ids) => { if (active) setAssignedCourtIds(ids) })
-      .catch(() => { if (active) setAssignedCourtIds([]) })
-      .finally(() => { if (active) setAssignedCourtsLoading(false) })
-    return () => { active = false }
-  }, [profile?.id, profile?.role, profile?.tournamentId])
+    const refresh = () => {
+      const request = ++latestRequest
+      void listMyRefereeCourtIds(profile.tournamentId, profile.id)
+        .then(ids => { if (active && request === latestRequest) {
+          const previous = assignedCourtIdsRef.current
+          assignedCourtIdsRef.current = ids
+          setAssignedCourtIds(ids)
+          if (previous.length !== ids.length || previous.some((id, index) => id !== ids[index])) {
+            void queryClient.invalidateQueries({ queryKey: supabaseTournamentKeys.detail(profile.tournamentId) })
+          }
+          setAssignmentError('')
+        } })
+        .catch(() => { if (active && request === latestRequest) { assignedCourtIdsRef.current = []; setAssignedCourtIds([]); setAssignmentError('Impossibile aggiornare i campi assegnati.') } })
+        .finally(() => { if (active && request === latestRequest) setAssignedCourtsLoading(false) })
+    }
+    refresh()
+    const client = requireSupabase()
+    const channel = client.channel(`referee-assignments:${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'referee_court_assignments', filter: `tournament_id=eq.${profile.tournamentId}` }, refresh)
+      .subscribe()
+    const timer = window.setInterval(refresh, 10000)
+    window.addEventListener('focus', refresh)
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); void client.removeChannel(channel) }
+  }, [profile?.id, profile?.role, profile?.tournamentId, queryClient])
 
   if (dataProvider === 'supabase' && profile?.role === 'referee') {
-    return <RefereeAssignedCourtsView tournament={tournament} courtIds={assignedCourtIds} isLoading={isLoading || assignedCourtsLoading} error={error} headerAction={logoutAction} />
+    return <RefereeAssignedCourtsView tournament={tournament} courtIds={assignedCourtIds} refereeId={profile.id} isLoading={isLoading || assignedCourtsLoading} error={error || assignmentError} headerAction={logoutAction} />
   }
 
   const match = tournament.matches.find((item) => item.id === matchRepo.selectedMatchId) ?? tournament.matches[0]
@@ -189,29 +216,31 @@ export function RefereeRoute() {
   )
 }
 
-export function RefereeAssignedCourtsView({ tournament, courtIds, isLoading, error, headerAction }: { tournament: ReturnType<typeof useTournament>['data']; courtIds: string[]; isLoading?: boolean; error?: string; headerAction?: ReactNode }) {
-  const [selectedCourtId, setSelectedCourtId] = useState('')
+export function RefereeAssignedCourtsView({ tournament, courtIds, refereeId = 'preview', isLoading, error, headerAction }: { tournament: ReturnType<typeof useTournament>['data']; courtIds: string[]; refereeId?: string; isLoading?: boolean; error?: string; headerAction?: ReactNode }) {
+  const storageKey = refereeCourtStorageKey(tournament.id, refereeId)
+  const [preferredCourtId, setPreferredCourtId] = useState(() => {
+    try { return sessionStorage.getItem(storageKey) ?? '' } catch { return '' }
+  })
+  const selectedCourtId = resolveRefereeCourt(courtIds, preferredCourtId)
+  useEffect(() => {
+    if (!selectedCourtId || isLoading) return
+    try { sessionStorage.setItem(storageKey, selectedCourtId) } catch { /* Storage can be unavailable. */ }
+  }, [isLoading, selectedCourtId, storageKey])
   if (isLoading) return <MobileRoleShell title="Area arbitro" action={headerAction}><main className="p-4"><p>Caricamento campi…</p></main></MobileRoleShell>
-  if (courtIds.length === 1) return <RefereePreparationView tournament={tournament} courtId={courtIds[0]} error={error} headerAction={headerAction} />
-  if (!courtIds.length) return <RefereePreparationView tournament={tournament} courtId="" error={error} headerAction={headerAction} />
-  if (!selectedCourtId) return <MobileRoleShell title="Seleziona campo" action={headerAction}><GlobalDiceReveal tournament={tournament} /><main className="grid gap-3 p-4">
-    <h1 className="text-2xl font-black">Seleziona campo</h1>
-    {courtIds.map((id) => { const match=tournament.matches.find(item=>item.courtId===id&&(item.status!=='completed'||!item.resultConfirmedAt)); const pending=tournament.teamCards.filter(card=>card.matchId===match?.id&&card.state==='pending').length; return <button key={id} className="rounded border border-white/10 bg-[#171717] px-4 py-4 text-left" onClick={() => setSelectedCourtId(id)}><span className="block text-xl font-black text-[var(--event-primary)]">{tournament.courts.find((court) => court.id === id)?.name ?? 'Campo'}</span>{match ? <><span className="mt-1 block font-bold">{tournament.teams.find(team=>team.id===match.teamAId)?.shortName} vs {tournament.teams.find(team=>team.id===match.teamBId)?.shortName}</span><span className="mt-1 block text-sm text-white/60">{match.status==='completed'?'Risultato da confermare':`Set ${match.score.currentSet} · ${match.score.games.A}–${match.score.games.B}`}</span>{pending>0&&<span className="mt-2 inline-flex rounded-full bg-[var(--event-primary)] px-2 py-1 text-xs font-black text-black">{pending} carta richiesta</span>}</> : <span className="mt-1 block text-sm text-white/55">In attesa</span>}</button> })}
-  </main></MobileRoleShell>
-  return <RefereePreparationView tournament={tournament} courtId={selectedCourtId} error={error} headerAction={headerAction} />
+  return <RefereePreparationView key={selectedCourtId} tournament={tournament} courtId={selectedCourtId} courtIds={courtIds} onCourtChange={setPreferredCourtId} error={error} headerAction={headerAction} />
 }
 
-function RefereePreparationView({ tournament, courtId, isLoading, error, headerAction }: { tournament: ReturnType<typeof useTournament>['data']; courtId: string; isLoading?: boolean; error?: string; headerAction?: ReactNode }) {
+function RefereePreparationView({ tournament, courtId, courtIds = [], onCourtChange, isLoading, error, headerAction }: { tournament: ReturnType<typeof useTournament>['data']; courtId: string; courtIds?: string[]; onCourtChange?: (courtId: string) => void; isLoading?: boolean; error?: string; headerAction?: ReactNode }) {
   const assigned = tournament.matches.filter(match => match.courtId === courtId)
   const [selectedId, setSelectedId] = useState('')
   const [lifecycleFeedback, setLifecycleFeedback] = useState('')
-  const live = useLiveOrchestrationRepository(tournament.id)
+  const live = useLiveOrchestrationRepository(tournament.id, false)
   if (isLoading) return <MobileRoleShell title="Area arbitro" action={headerAction}><main className="p-4"><p>Caricamento partite…</p></main></MobileRoleShell>
   if (error) return <MobileRoleShell title="Area arbitro" action={headerAction}><main className="p-4"><EmptyState title="Impossibile caricare la partita" /></main></MobileRoleShell>
-  if (!courtId) return <MobileRoleShell title="Area arbitro" action={headerAction}><main className="p-4"><EmptyState title="Nessun campo assegnato" /></main></MobileRoleShell>
+  if (!courtId) return <MobileRoleShell title="Area arbitro" action={headerAction}><main className="p-4"><EmptyState title="NESSUN CAMPO ASSEGNATO" detail="La Regia non ti ha ancora assegnato un campo." /></main></MobileRoleShell>
   const match = assigned.find(item => item.id === selectedId) ?? assigned.find(item => item.status !== 'completed' || !item.resultConfirmedAt) ?? assigned[0]
   const court = tournament.courts.find(item => item.id === courtId)
-  if (!match) return <MobileRoleShell title={court?.name ?? 'Campo'} action={headerAction}><main className="p-4"><EmptyState title="Nessuna partita assegnata" /></main></MobileRoleShell>
+  if (!match) return <MobileRoleShell title={court?.name ?? 'Campo'} action={headerAction}><main className="space-y-4 p-4">{courtIds.length > 1 && <label className="grid gap-1 text-sm font-bold">CAMPO<select aria-label="Campo assegnato" value={courtId} onChange={event => onCourtChange?.(event.target.value)}>{courtIds.map(id => <option key={id} value={id}>{tournament.courts.find(item => item.id === id)?.name ?? 'Campo'}</option>)}</select></label>}<EmptyState title="Nessuna partita assegnata" /></main></MobileRoleShell>
   const teamA = tournament.teams.find(item => item.id === match.teamAId)
   const teamB = tournament.teams.find(item => item.id === match.teamBId)
   const round = tournament.rounds?.find(item => item.id === match.roundId)
@@ -222,9 +251,19 @@ function RefereePreparationView({ tournament, courtId, isLoading, error, headerA
     try { await live.controlRefereeMatch(match.id, action); setLifecycleFeedback(success) }
     catch (cause) { setLifecycleFeedback(cause instanceof Error ? cause.message : 'Operazione non riuscita.') }
   }
-  return <MobileRoleShell title={court?.name ?? 'Campo'} status={match.status} action={headerAction}><CardPlayNotification tournament={tournament} matchIds={[match.id]}/><LiveEventPresenter tournament={tournament} audience="referee" matchIds={[match.id]} courtId={match.courtId}/>
-    <GlobalDiceReveal tournament={tournament} />
+  return <MobileRoleShell title={court?.name ?? 'Campo'} status={match.status} action={headerAction}><CardPlayNotification key={match.id} tournament={tournament} audience="referee" matchIds={[match.id]}/><LiveEventPresenter key={match.id} tournament={tournament} audience="referee" matchIds={[match.id]} courtId={match.courtId} subscribe={false}/>
+    <GlobalDiceReveal tournament={tournament} audience="referee" />
     <main className="mx-auto max-w-3xl space-y-5 px-4 py-5">
+      {courtIds.length > 1 && <label className="grid gap-1 text-sm font-bold text-white/70">CAMPO
+        <select aria-label="Campo assegnato" className="rounded border border-white/20 bg-black px-3 py-3 text-white" value={courtId} onChange={event => onCourtChange?.(event.target.value)}>
+          {courtIds.map(id => {
+            const assignedCourt = tournament.courts.find(item => item.id === id)
+            const currentMatch = tournament.matches.find(item => item.courtId === id && (item.status !== 'completed' || !item.resultConfirmedAt)) ?? tournament.matches.find(item => item.courtId === id)
+            const group = tournament.groups.find(item => item.id === currentMatch?.groupId)
+            return <option key={id} value={id}>{assignedCourt?.name ?? 'Campo'}{group ? ` · ${group.name}` : ''}</option>
+          })}
+        </select>
+      </label>}
       <header><p className="text-sm font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">{court?.name ?? 'Campo assegnato'}</p><h1 className="mt-2 text-3xl font-black">{teamA?.name} vs {teamB?.name}</h1><p className="text-white/55">{round?.name ?? 'Turno'} · {tournament.groups.find(group => group.id === match.groupId)?.name ?? 'Girone'}</p></header>
       {assigned.length > 1 ? <label className="grid gap-1 text-sm font-bold text-white/55">Partita<select className="rounded border border-white/10 bg-black px-3 py-3 text-white" value={match.id} onChange={event => setSelectedId(event.target.value)}>{assigned.map(item => { const a=tournament.teams.find(team=>team.id===item.teamAId); const b=tournament.teams.find(team=>team.id===item.teamBId); return <option key={item.id} value={item.id}>{a?.shortName} vs {b?.shortName} · {item.status}</option> })}</select></label> : null}
       <Readiness match={match} teams={[teamA, teamB]} />

@@ -1,4 +1,4 @@
-import { Box, Button, MenuItem, TextField } from '@mui/material'
+﻿import { Box, Button, MenuItem, TextField } from '@mui/material'
 import type { TeamRepositoryContract } from '../../../repositories/contracts'
 import { PageShell } from '../../../shared/components/Foundation'
 import { useEffect, useMemo, useState } from 'react'
@@ -12,7 +12,6 @@ import {
   credentialsToCsv,
   getProvisioningErrorMessage,
   listTournamentProvisionedAccounts,
-  provisionTeamAccounts,
   provisionTournamentUser,
   type ProvisionedCredential,
 } from '../../../services/supabase/provisioning'
@@ -245,27 +244,6 @@ export function TournamentSetupContent({
     )
   }
 
-  async function createMissingTeamLogins() {
-    setSavingTeam(true)
-    setFormError('')
-    setFormMessage('')
-    setCopyMessage('')
-    setLatestCredential(null)
-    try {
-      const credentials = await provisionTeamAccounts({
-        tournamentId: tournament.id,
-        teams: buildBulkTeamProvisionInputs(missingAccountTeams, usedTeamUsernames),
-      })
-      credentials.forEach((credential) => registerCreatedCredential(credential, credential.teamName ?? credential.username))
-      setFormMessage(`${credentials.length} accessi squadra creati. Salva subito le credenziali.`)
-      await refreshAccounts()
-    } catch (caughtError) {
-      setFormError(getProvisioningErrorMessage(caughtError))
-    } finally {
-      setSavingTeam(false)
-    }
-  }
-
   function updateDraft(nextDraft: TeamRosterDraft) {
     setDraft(nextDraft)
   }
@@ -336,8 +314,6 @@ export function TournamentSetupContent({
             <TeamCredentialsToolbar
               credentialsCount={createdTeamCredentials.length}
               missingTeamsCount={missingAccountTeams.length}
-              disabled={savingTeam || accountsLoading || Boolean(accountsError)}
-              onBulkCreate={() => void createMissingTeamLogins()}
               onDownload={downloadSessionCredentials}
             />
           ) : null}
@@ -421,11 +397,11 @@ export function TournamentSetupContent({
       {tab === 'ROUNDS / MATCHES' ? (
         <SetupPanel icon={CalendarPlus} title="Turni / Partite">
           <div className="grid gap-4 lg:grid-cols-2">
-            <SimpleList items={(tournament.rounds ?? []).map((round) => `${round.name} · ${round.status}`)} emptyLabel="Nessun turno configurato" />
+            <SimpleList items={(tournament.rounds ?? []).map((round) => `${round.name} Â· ${round.status}`)} emptyLabel="Nessun turno configurato" />
             <SimpleList items={tournament.matches.map((match) => {
               const teamA = tournament.teams.find((team) => team.id === match.teamAId)
               const teamB = tournament.teams.find((team) => team.id === match.teamBId)
-              return `${teamA?.name ?? 'TBD'} vs ${teamB?.name ?? 'TBD'} · ${match.status}`
+              return `${teamA?.name ?? 'TBD'} vs ${teamB?.name ?? 'TBD'} Â· ${match.status}`
             })} emptyLabel="Nessuna partita configurata" />
           </div>
         </SetupPanel>
@@ -433,7 +409,7 @@ export function TournamentSetupContent({
 
       {tab === 'CARDS' ? (
         <SetupPanel icon={CreditCard} title="Carte">
-          <SimpleList items={tournament.cards.map((card) => `${card.name} · ${card.durationType}`)} emptyLabel="Nessuna carta configurata" />
+          <SimpleList items={tournament.cards.map((card) => `${card.name} Â· ${card.durationType}`)} emptyLabel="Nessuna carta configurata" />
         </SetupPanel>
       ) : null}
     </div></PageShell>
@@ -540,7 +516,7 @@ function TeamRosterForm({
       {pendingTeamLogin ? (
         <div className="grid gap-3 rounded border border-red-400/40 bg-red-950/20 p-4">
           <p className="font-black text-red-100">Squadra creata, creazione accesso non riuscita</p>
-          <p className="text-sm font-bold text-red-100/70">{pendingTeamLogin.teamName} · {pendingTeamLogin.username}</p>
+          <p className="text-sm font-bold text-red-100/70">{pendingTeamLogin.teamName} Â· {pendingTeamLogin.username}</p>
           <Button type="button" disabled={disabled} className="w-fit rounded bg-white px-3 py-2 text-sm font-black text-black disabled:opacity-50" onClick={onRetryLogin}>
             Riprova creazione accesso
           </Button>
@@ -550,7 +526,7 @@ function TeamRosterForm({
         <div className="grid gap-3 rounded border border-[var(--event-primary)]/40 bg-black p-4">
           <div>
             <p className="font-black uppercase text-[var(--event-primary)]">Squadra creata</p>
-            <p className="text-xs font-bold text-white/45">Salva subito queste credenziali. La password non potrà essere recuperata.</p>
+            <p className="text-xs font-bold text-white/45">Salva subito queste credenziali. La password non potrÃ  essere recuperata.</p>
           </div>
           <p className="font-black">{latestCredential.teamName}</p>
           <p className="text-xs uppercase text-white/35">Nome utente</p>
@@ -578,31 +554,13 @@ function TeamRosterForm({
   )
 }
 
-function buildBulkTeamProvisionInputs(teams: Tournament['teams'], usedUsernames: string[]) {
-  const nextUsedUsernames = [...usedUsernames]
-  return teams.map((team) => {
-    const username = buildUniqueTeamUsername(team.name, nextUsedUsernames)
-    nextUsedUsernames.push(username)
-    return {
-      id: team.id,
-      name: team.name,
-      shortName: team.shortName,
-      username,
-    }
-  })
-}
-
 function TeamCredentialsToolbar({
   credentialsCount,
   missingTeamsCount,
-  disabled,
-  onBulkCreate,
   onDownload,
 }: {
   credentialsCount: number
   missingTeamsCount: number
-  disabled: boolean
-  onBulkCreate: () => void
   onDownload: () => void
 }) {
   return (
@@ -617,11 +575,11 @@ function TeamCredentialsToolbar({
           Scarica tutte le credenziali squadre
         </button>
       </div>
-      <button type="button" disabled={disabled || missingTeamsCount === 0} className="inline-flex w-fit items-center gap-2 rounded bg-white px-3 py-2 text-sm font-black text-black disabled:cursor-not-allowed disabled:opacity-45" onClick={onBulkCreate}>
+      <a href="/admin/access" className="inline-flex w-fit items-center gap-2 rounded bg-white px-3 py-2 text-sm font-black text-black">
         <KeyRound className="size-4" />
-        Genera account squadre
-      </button>
-      <p className="text-xs font-bold text-white/45">{missingTeamsCount} teams without accounts.</p>
+        Gestisci account torneo
+      </a>
+      <p className="text-xs font-bold text-white/45">{missingTeamsCount} squadre senza account. Crea insieme gli account squadra e arbitro in Gestione accessi.</p>
     </div>
   )
 }

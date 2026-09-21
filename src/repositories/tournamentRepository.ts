@@ -7,6 +7,7 @@ import { useSupabaseTournamentRepository } from './supabase/supabaseRepositories
 import { createSupabaseTournamentAdminRepository } from './supabase/supabaseTournamentAdminRepository'
 import { supabaseTournamentKeys } from './supabase/queryKeys'
 import { resolveSelectedTournamentId, useSelectedTournamentStore } from '../features/tournament/selectedTournamentStore'
+import { cleanupTournamentAuthUsers } from '../services/supabase/provisioning'
 
 export function useTournamentRepository() {
   const supabaseEnabled = dataProvider === 'supabase'
@@ -71,6 +72,19 @@ export function useTournamentRepository() {
       ])
     },
   })
+  const deleteMutation = useMutation({
+    mutationFn: async (tournamentId: string) => {
+      await cleanupTournamentAuthUsers(tournamentId)
+      await createSupabaseTournamentAdminRepository().deleteTournamentIfSafe(tournamentId)
+    },
+    onSuccess: async (_, tournamentId) => {
+      queryClient.removeQueries({ queryKey: supabaseTournamentKeys.detail(tournamentId) })
+      queryClient.setQueryData<typeof listQuery.data>(supabaseTournamentKeys.list(), current =>
+        current?.filter(item => item.id !== tournamentId))
+      if (useSelectedTournamentStore.getState().selectedTournamentId === tournamentId) selectTournament(null)
+      await queryClient.invalidateQueries({ queryKey: supabaseTournamentKeys.list() })
+    },
+  })
 
   const createTournament = async (name: string) => {
     const tournament = await createMutation.mutateAsync(name)
@@ -88,6 +102,7 @@ export function useTournamentRepository() {
     selectTournament,
     createTournament,
     updateTournamentConfiguration: (tournamentId: string, input: TournamentConfigurationInput) => updateMutation.mutateAsync({ tournamentId, input }),
+    deleteTournamentIfSafe: (tournamentId: string) => deleteMutation.mutateAsync(tournamentId),
     isLoading: listQuery.isLoading || (Boolean(resolvedTournamentId) && supabaseRepository.isLoading),
     isCreating: createMutation.isPending,
     isSaving: updateMutation.isPending,
@@ -97,6 +112,8 @@ export function useTournamentRepository() {
         ? createMutation.error.message
         : updateMutation.error instanceof Error
           ? updateMutation.error.message
+        : deleteMutation.error instanceof Error
+          ? deleteMutation.error.message
           : supabaseRepository.error,
   }
 }

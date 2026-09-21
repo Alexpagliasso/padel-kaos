@@ -42,7 +42,7 @@ export function TournamentSetupPage({ initialSection = 'GENERAL' }: { initialSec
         </Box>
         {tournament.teams.length !== entry.config.teamsCount && <Alert severity="warning" sx={{ mb: 3 }}>Le squadre iscritte non corrispondono al numero previsto. L’avvio qui mostra il ciclo del torneo senza generare il calendario.</Alert>}
         <TournamentStructurePreview config={entry.config} />
-        <Divider sx={{ my: 3 }} /><TournamentLifecycle entry={entry} />
+        <Divider sx={{ my: 3 }} /><TournamentLifecycle entry={entry} onDelete={workspace.remote ? workspace.deleteTournamentIfSafe : undefined} />
       </Paper>}
     </Box>
   </PageShell>

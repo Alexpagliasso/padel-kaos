@@ -1,8 +1,10 @@
 import { corsHeaders, createAdminClient, generateReadablePassword, getCallerProfile, jsonResponse, requireTournamentAdmin, technicalEmail } from '../_shared/auth.ts'
+import { cleanupTournamentAuth } from './cleanup.ts'
 
 type ProvisionRole = 'referee' | 'team' | 'court_display' | 'main_display'
 
 type ProvisionInput = {
+  action?: 'provision' | 'cleanup_tournament_auth'
   tournamentId: string
   username?: string
   password?: string
@@ -24,6 +26,33 @@ Deno.serve(async (request) => {
     const caller = await getCallerProfile(request, adminClient)
     await requireTournamentAdmin(caller, input.tournamentId, adminClient)
 
+    if (input.action === 'cleanup_tournament_auth') {
+      const result = await cleanupTournamentAuth(input.tournamentId, caller.id, {
+        getTournamentStatus: async (tournamentId) => {
+          const { data, error } = await adminClient.from('tournaments').select('status').eq('id', tournamentId).single()
+          if (error || !data) throw new Error('tournament not found')
+          return data.status
+        },
+        listProfiles: async (tournamentId) => {
+          const { data, error } = await adminClient.from('profiles').select('id,role')
+            .eq('tournament_id', tournamentId).in('role', ['team', 'referee', 'court_display', 'main_display'])
+          if (error) throw error
+          return data ?? []
+        },
+        deleteAuthUser: async (userId) => {
+          const { error } = await adminClient.auth.admin.deleteUser(userId)
+          return { error }
+        },
+        deleteProfile: async (userId, tournamentId) => {
+          const { error } = await adminClient.from('profiles').delete().eq('id', userId)
+            .eq('tournament_id', tournamentId).in('role', ['team', 'referee', 'court_display', 'main_display'])
+          if (error) throw error
+        },
+      })
+      return jsonResponse(result)
+    }
+    if (input.action && input.action !== 'provision') throw new Error('invalid action')
+
     const { data: tournament, error: tournamentError } = await adminClient
       .from('tournaments')
       .select('id,name')
@@ -41,6 +70,7 @@ Deno.serve(async (request) => {
           tournamentName: tournament.name,
           tournamentSlug: input.tournamentSlug,
           username: team.username,
+          password: input.password,
           role: 'team',
           teamId: team.teamId,
           teamName: team.teamName,

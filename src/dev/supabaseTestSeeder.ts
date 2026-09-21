@@ -3,7 +3,7 @@ import type { TeamRepositoryContract } from '../repositories/contracts'
 import { buildUniqueTeamUsername, createTeamRosterDraft, toCreateTeamInput, validateTeamRosterDraft } from '../features/admin/setup/teamRosterFormState'
 import { listTournamentProvisionedAccounts, provisionTournamentUser } from '../services/supabase/provisioning'
 
-export const DEV_TEST_TEAM_PASSWORD = 'Test1234!'
+export const DEV_TEST_TEAM_PASSWORD = 'Test123456789!'
 export type SeedResult = { template: Team; teamId?: string; creationAttempted?: boolean; username: string; status: 'pending' | 'created' | 'active' | 'error'; error?: string }
 export const seedSessions = new Map<string, SeedResult[]>()
 const busyTournaments = new Set<string>()

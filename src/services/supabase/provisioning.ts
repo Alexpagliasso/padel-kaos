@@ -3,6 +3,75 @@ import { getAuthTournamentSlug } from '../../features/auth/authIdentity'
 import type { ExistingProvisionedAccount } from '../../features/auth/accessManagementState'
 import type { ProvisionableRole } from '../../features/auth/authIdentity'
 import type { Court } from '../../shared/types/domain'
+import type { Team } from '../../shared/types/domain'
+import { buildUniqueTeamUsername } from '../../features/admin/setup/teamRosterFormState'
+
+export const STANDARD_TEST_PASSWORD = 'Test123456789!'
+export type ProvisioningGroupResult = { created: ProvisionedCredential[]; existing: number; failed: Array<{ name: string; reason: string }> }
+export type TournamentProvisioningResult = { teams: ProvisioningGroupResult; referees: ProvisioningGroupResult }
+
+export async function provisionTournamentOperationalAccounts(input: {
+  tournamentId: string; teams: Team[]; courts: Court[]; accounts: ExistingProvisionedAccount[]
+  provision?: typeof provisionTournamentUser
+}) {
+  const provision = input.provision ?? provisionTournamentUser
+  const result: TournamentProvisioningResult = {
+    teams: { created: [], existing: 0, failed: [] },
+    referees: { created: [], existing: 0, failed: [] },
+  }
+  const used = [
+    ...input.accounts.map(account => account.username.toLowerCase()),
+  ]
+  for (const team of input.teams) {
+    if (input.accounts.some(account => account.role === 'team' && account.teamId === team.id)) {
+      result.teams.existing += 1
+      continue
+    }
+    const username = buildUniqueTeamUsername(team.name, used)
+    if (!username) { result.teams.failed.push({ name: team.name, reason: 'Nome squadra non valido' }); continue }
+    used.push(username)
+    try {
+      const credential = await provision({ tournamentId: input.tournamentId, role: 'team', teamId: team.id,
+        teamName: team.name, username, password: STANDARD_TEST_PASSWORD })
+      result.teams.created.push({ ...credential, teamName: team.name })
+    } catch (error) { result.teams.failed.push({ name: team.name, reason: safeBulkError(error) }) }
+  }
+  const orderedCourts = [...input.courts].sort((a, b) => a.name.localeCompare(b.name, 'it', { numeric: true }) || a.id.localeCompare(b.id))
+  const missing = getMissingRefereeCourts(orderedCourts, input.accounts)
+  result.referees.existing = orderedCourts.length - missing.length
+  for (const court of missing) {
+    const number = orderedCourts.findIndex(item => item.id === court.id) + 1
+    const base = `arbitro${number}`
+    let created = false
+    for (let suffix = 1; suffix <= 100; suffix += 1) {
+      const username = suffix === 1 ? base : `${base}-${suffix}`
+      if (used.includes(username)) continue
+      used.push(username)
+      try {
+        const credential = await provision({ tournamentId: input.tournamentId, role: 'referee', courtId: court.id,
+          teamName: `Arbitro ${number}`, username, password: STANDARD_TEST_PASSWORD })
+        result.referees.created.push({ ...credential, courtId: court.id })
+        created = true
+        break
+      } catch (error) {
+        if (isUsernameCollision(error)) continue
+        result.referees.failed.push({ name: court.name, reason: safeBulkError(error) })
+        break
+      }
+    }
+    if (!created && !result.referees.failed.some(item => item.name === court.name)) {
+      result.referees.failed.push({ name: court.name, reason: 'Nessun nome utente disponibile per questo arbitro.' })
+    }
+  }
+  return result
+}
+
+function safeBulkError(error: unknown) {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase()
+  if (isUsernameCollision(error)) return 'Nome utente già presente.'
+  if (message.includes('not authorized')) return 'Operazione non autorizzata.'
+  return 'Creazione non riuscita. Riprova o verifica il servizio di provisioning.'
+}
 
 export type ProvisionTournamentUserInput = {
   tournamentId: string
@@ -85,6 +154,7 @@ export async function provisionTournamentUser(input: ProvisionTournamentUserInpu
       headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
       body: {
         ...input,
+        action: 'provision',
         password: input.password || undefined,
         tournamentSlug: input.tournamentSlug ?? getAuthTournamentSlug(),
       },
@@ -107,8 +177,10 @@ export async function provisionTeamAccounts(input: {
   const { data, error } = await client.functions.invoke<{ credentials: ProvisionedCredential[] }>('provision-tournament-user', {
     headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
     body: {
+      action: 'provision',
       tournamentId: input.tournamentId,
       tournamentSlug: getAuthTournamentSlug(),
+      password: STANDARD_TEST_PASSWORD,
       bulkTeams: input.teams.map((team) => ({
         teamId: team.id,
         teamName: team.name,
@@ -211,6 +283,23 @@ export async function replaceRefereeCourtAssignments(refereeUserId: string, cour
   if (error) throw new Error(getProvisioningErrorMessage(error))
 }
 
+export async function setRefereeCourtAssignment(tournamentId: string, courtId: string, refereeUserId: string | null) {
+  const { error } = await requireSupabase().rpc('set_referee_court_assignment', {
+    p_tournament_id: tournamentId,
+    p_court_id: courtId,
+    p_referee_user_id: refereeUserId,
+  })
+  if (error) {
+    if (import.meta.env.DEV) console.error('Court assignment RPC failed', {
+      code: error.code, message: error.message, details: error.details, hint: error.hint,
+    })
+    if (error.message.includes('not authorized')) throw new Error('Non sei autorizzato a modificare gli arbitri.')
+    if (error.message.includes('referee does not belong')) throw new Error('Seleziona un arbitro di questo torneo.')
+    if (error.message.includes('court does not belong')) throw new Error('Il campo non appartiene a questo torneo.')
+    throw new Error('Assegnazione non riuscita. Ricarica la Regia e riprova.', { cause: error })
+  }
+}
+
 export async function listMyRefereeCourtIds(tournamentId: string, refereeUserId: string) {
   const { data, error } = await requireSupabase().from('referee_court_assignments').select('court_id')
     .eq('tournament_id', tournamentId).eq('referee_user_id', refereeUserId).order('created_at')
@@ -219,17 +308,21 @@ export async function listMyRefereeCourtIds(tournamentId: string, refereeUserId:
 }
 
 export async function cleanupTournamentAuthUsers(tournamentId: string) {
-  const { data, error } = await requireSupabase().functions.invoke<{ deletedUserIds: string[] }>('cleanup-tournament-auth-users', {
-    body: { tournamentId },
+  const { data, error } = await requireSupabase().functions.invoke<{ deleted: number; alreadyMissing: number; failed: number }>('provision-tournament-user', {
+    body: { action: 'cleanup_tournament_auth', tournamentId },
   })
   if (error) throw error
-  return data ?? { deletedUserIds: [] }
+  if (!data || !Number.isInteger(data.failed) || data.failed > 0) {
+    throw new Error(`Pulizia account incompleta: ${data?.failed ?? 'esito sconosciuto'} account non rimossi. Riprova prima di eliminare il torneo.`)
+  }
+  return data
 }
 
 export function credentialsToCsv(credentials: ProvisionedCredential[]) {
   const rows = [
-    ['team_name', 'username', 'temporary_password'],
+    ['role', 'team_name', 'username', 'temporary_password'],
     ...credentials.map((credential) => [
+      credential.role,
       credential.teamName ?? '',
       credential.username,
       credential.temporaryPassword ?? '',

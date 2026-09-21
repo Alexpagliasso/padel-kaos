@@ -11,6 +11,7 @@ export type TournamentRepositoryContract = {
   selectTournament?: (tournamentId: string | null) => void
   createTournament?: (name: string) => Promise<Tournament>
   updateTournamentConfiguration?: (tournamentId: string, input: TournamentConfigurationInput) => Promise<Tournament>
+  deleteTournamentIfSafe?: (tournamentId: string) => Promise<void>
   isLoading?: boolean
   isCreating?: boolean
   isSaving?: boolean

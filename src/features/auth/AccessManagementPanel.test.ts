@@ -23,13 +23,11 @@ describe('AccessManagementPanel helpers', () => {
     expect(html).toContain('Auto generate')
     expect(html).toContain('Manual password')
     expect(html).toContain('Assignment')
-    expect(html).toContain('Bulk team provisioning')
-    expect(html).toContain('Genera account squadre')
+    expect(html).toContain('CREA ACCOUNT TORNEO')
     expect(html).toContain('Arbitri')
     expect(html).toContain('2 campi')
     expect(html).toContain('0 arbitri configurati')
     expect(html).toContain('2 arbitri mancanti')
-    expect(html).toContain('Genera arbitri mancanti')
   })
 
   it('renders manual password fields when manual mode is selected', () => {
@@ -104,8 +102,8 @@ describe('AccessManagementPanel helpers', () => {
       { role: 'team', teamId: 'red-id', teamName: 'Team Red', username: 'team_red', temporaryPassword: 'Temp"Pass1' },
     ])
 
-    expect(csv.split('\n')[0]).toBe('"team_name","username","temporary_password"')
-    expect(csv).toContain('"Team Red","team_red","Temp""Pass1"')
+    expect(csv.split('\n')[0]).toBe('"role","team_name","username","temporary_password"')
+    expect(csv).toContain('"team","Team Red","team_red","Temp""Pass1"')
     expect(csv).not.toContain('red-id')
     expect(csv).not.toContain('@auth.padelkaos.internal')
   })

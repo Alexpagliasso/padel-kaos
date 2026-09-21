@@ -18,30 +18,34 @@ export function AdminResultsContent({ tournament }: { tournament: Tournament }) 
   const [edit, setEdit] = useState<EditTarget>()
   const [confirming, setConfirming] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [failure, setFailure] = useState(false)
   const live = useLiveOrchestrationRepository(tournament.id)
   const selectedGroupId = tournament.groups.some(group => group.id === groupId) ? groupId : tournament.groups[0]?.id ?? ''
   const matches = tournament.matches.filter(match => match.groupId === selectedGroupId)
     .sort((a, b) => (tournament.rounds?.find(round => round.id === a.roundId)?.sequence ?? 0) - (tournament.rounds?.find(round => round.id === b.roundId)?.sequence ?? 0))
   const run = async (action: () => Promise<unknown>, success: string) => {
     setFeedback('')
-    try { await action(); setFeedback(success) } catch (cause) { setFeedback(cause instanceof Error ? cause.message : 'Operazione non riuscita.') }
+    setFailure(false)
+    try { await action(); setFeedback(success); return true } catch (cause) { setFeedback(cause instanceof Error ? cause.message : 'Operazione non riuscita.'); setFailure(true); return false }
   }
   const openEdit = (match: Match, setNumber: 1 | 2 | 3) => {
     const normal = setNumber < 3 ? getPersistedSetResult(tournament, match.id, setNumber as 1 | 2) : undefined
     setEdit({ match, setNumber, scoreA: setNumber === 3 ? match.superTiebreakA ?? 0 : normal?.gamesA ?? 0, scoreB: setNumber === 3 ? match.superTiebreakB ?? 0 : normal?.gamesB ?? 0 })
     setConfirming(false)
+    setFeedback('')
+    setFailure(false)
   }
   return <Box>
     <Typography variant="h1">RISULTATI</Typography>
     <Typography color="text.secondary" sx={{ mt: 1, mb: 3 }}>Tutte le partite del torneo, aggiornate in tempo reale. La Regia può correggere errori operativi con tracciamento.</Typography>
     <Paper sx={{ mb: 3 }}><Tabs value={selectedGroupId} onChange={(_, value) => setGroupId(value)} variant="scrollable" scrollButtons="auto" aria-label="Gironi risultati">{tournament.groups.map(group => <Tab key={group.id} value={group.id} label={group.name.toUpperCase()} />)}</Tabs></Paper>
-    {feedback && <Alert severity={feedback.includes('non riuscita') ? 'error' : 'success'} sx={{ mb: 2 }}>{feedback}</Alert>}
+    {feedback && <Alert severity={failure ? 'error' : 'success'} sx={{ mb: 2 }}>{feedback}</Alert>}
     {!matches.length && <Alert severity="info">Nessuna partita nel girone selezionato.</Alert>}
     <Stack spacing={1.5}>{matches.map(match => <ResultAccordion key={match.id} tournament={tournament} match={match} onEdit={openEdit} onConfirm={() => void run(() => live.confirmMatchResult(match.id), 'Risultato finale confermato.')} pending={live.isPending} />)}</Stack>
     <Dialog open={Boolean(edit)} onClose={() => { setEdit(undefined); setConfirming(false) }}>
       <DialogTitle>{confirming ? 'CONFERMA CORREZIONE RISULTATO' : `MODIFICA ${edit?.setNumber === 3 ? 'SUPER TIE-BREAK' : `SET ${edit?.setNumber ?? ''}`}`}</DialogTitle>
-      <DialogContent>{confirming ? <Typography sx={{ mt: 1 }}>Salvare la correzione {edit?.scoreA}–{edit?.scoreB}? Se il vincitore cambia, la conferma finale e la prontezza del turno saranno ricalcolate.</Typography> : <Stack direction="row" spacing={2} sx={{ mt: 1 }}><TextField type="number" label="Team A" value={edit?.scoreA ?? 0} onChange={event => setEdit(value => value ? { ...value, scoreA: Math.max(0, Number(event.target.value)) } : value)} /><TextField type="number" label="Team B" value={edit?.scoreB ?? 0} onChange={event => setEdit(value => value ? { ...value, scoreB: Math.max(0, Number(event.target.value)) } : value)} /></Stack>}</DialogContent>
-      <DialogActions><Button onClick={() => { setEdit(undefined); setConfirming(false) }}>ANNULLA</Button><Button variant="contained" disabled={live.isPending || edit?.scoreA === edit?.scoreB} onClick={() => { if (!edit) return; if (!confirming) { setConfirming(true); return } const target = edit; void run(() => live.correctMatchResult(target.match.id, target.setNumber, target.scoreA, target.scoreB), 'Correzione salvata. Conferma finale e classifiche ricalcolate.'); setEdit(undefined); setConfirming(false) }}>{confirming ? 'CONFERMA' : 'SALVA CORREZIONE'}</Button></DialogActions>
+      <DialogContent>{confirming ? <Typography sx={{ mt: 1 }}>Salvare la correzione {edit?.scoreA}–{edit?.scoreB}? Se il vincitore cambia, la conferma finale e la prontezza del turno saranno ricalcolate.</Typography> : <Stack direction="row" spacing={2} sx={{ mt: 1 }}><TextField type="number" label="Team A" value={edit?.scoreA ?? 0} onChange={event => setEdit(value => value ? { ...value, scoreA: Math.max(0, Number(event.target.value)) } : value)} /><TextField type="number" label="Team B" value={edit?.scoreB ?? 0} onChange={event => setEdit(value => value ? { ...value, scoreB: Math.max(0, Number(event.target.value)) } : value)} /></Stack>}{failure && <Alert severity="error" sx={{ mt: 2 }}>{feedback}</Alert>}</DialogContent>
+      <DialogActions><Button onClick={() => { setEdit(undefined); setConfirming(false) }}>ANNULLA</Button><Button variant="contained" disabled={live.isPending || edit?.scoreA === edit?.scoreB} onClick={() => { if (!edit) return; if (!confirming) { setConfirming(true); return } const target = edit; void run(() => live.correctMatchResult(target.match.id, target.setNumber, target.scoreA, target.scoreB), 'Correzione salvata. Conferma nuovamente il risultato finale per aggiornare la classifica.').then(saved => { if (saved) { setEdit(undefined); setConfirming(false) } }) }}>{confirming ? 'CONFERMA' : 'SALVA CORREZIONE'}</Button></DialogActions>
     </Dialog>
   </Box>
 }

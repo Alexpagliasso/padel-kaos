@@ -48,6 +48,10 @@ export function useAdminWorkspace() {
           return [error instanceof Error ? error.message : 'Impossibile salvare la configurazione del torneo.']
         }
       },
+      deleteTournamentIfSafe: async (target: WorkspaceEntry) => {
+        if (!source.deleteTournamentIfSafe) throw new Error('Eliminazione torneo non disponibile')
+        await source.deleteTournamentIfSafe(target.domain.id)
+      },
     }
   }
   const entries = { ...(!isSupabaseProvider() ? saved : {}), ...state.entries }

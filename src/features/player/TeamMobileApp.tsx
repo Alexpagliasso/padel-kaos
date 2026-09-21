@@ -13,7 +13,8 @@ import { EventPresentationOverlay } from '../../shared/components/EventPresentat
 import { GlobalEventOverlay } from '../../shared/components/GlobalEventOverlay'
 import { getDiceRuleForMatch } from '../tournament/selectors'
 import { formatCountdown, getDiceEffect } from '../../domain/live/readiness'
-import { ActiveCardEffects, ActiveDiceIndicator, CardPlayNotification, GlobalDiceReveal } from '../../shared/components/LiveEffects'
+import { ActiveCardEffects, ActiveDiceIndicator, CardPlayNotification } from '../../shared/components/LiveEffects'
+import { GlobalDiceReveal } from '../../shared/components/GlobalDiceReveal'
 import { SetTimer } from '../../shared/components/SetTimer'
 import { useSharedClock } from '../../shared/hooks/useSharedClock'
 import { groupStandings } from '../../domain/standings/groupStandings'
@@ -44,8 +45,8 @@ export function TeamMobileApp({ tournament, events, routeState, onSelectDemoTeam
   const matchCards = getOwnMatchCards(cards, playerTeam.id, match.id)
   const diceEffect = getDiceEffect(tournament, match)
 
-  return <MobileRoleShell title={playerTeam.name} status={tournament.status ?? match.status} action={headerAction}><CardPlayNotification tournament={tournament} matchIds={[match.id]} excludeTeamId={playerTeam.id}/><LiveEventPresenter tournament={tournament} audience="team" matchIds={[match.id]} teamId={playerTeam.id}/>
-    <GlobalDiceReveal tournament={tournament} />
+  return <MobileRoleShell title={playerTeam.name} status={tournament.status ?? match.status} action={headerAction}><CardPlayNotification tournament={tournament} audience="team" matchIds={[match.id]} excludeTeamId={playerTeam.id}/><LiveEventPresenter tournament={tournament} audience="team" matchIds={[match.id]} teamId={playerTeam.id}/>
+    <GlobalDiceReveal tournament={tournament} audience="team" />
     <main className="mx-auto w-full max-w-3xl overflow-x-hidden px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-4">
       <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
         <div className="min-w-0"><p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">{showDemoTeamSelector ? 'Demo giocatore' : 'Area giocatore'}</p><p className="truncate text-sm text-white/60">Ciao {greetingName}</p></div>
