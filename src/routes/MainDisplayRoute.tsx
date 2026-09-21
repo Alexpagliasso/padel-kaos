@@ -1,86 +1,28 @@
-import { EventOverlay } from '../shared/components/Foundation'
+import { useEffect,useState } from 'react'
+import { AnimatePresence,motion } from 'framer-motion'
 import { DisplayShell } from '../shared/components/Foundation'
-import { MatchTile } from '../features/live/MatchTile'
 import { useRoleTournament as useTournament } from '../features/admin/preview/useRoleTournament'
-import { getDiceRuleForMatch } from '../features/tournament/selectors'
-import { getFeaturedGlobalEvent, getKaosMatch, getMainDisplayMode } from '../features/display/mainDisplayState'
-import type { Tournament } from '../shared/types/domain'
+import { ActiveCardEffects,ActiveDiceIndicator,CardPlayNotification,GlobalDiceReveal } from '../shared/components/LiveEffects'
+import { currentPair,displayStatus,getCurrentTurn,getTurnMatches,globalLayout,paginateMatches,setHistory } from '../features/display/displayModel'
+import type { Match,Tournament } from '../shared/types/domain'
+import { SetTimer } from '../shared/components/SetTimer'
+import { LiveEventPresenter } from '../shared/components/LiveEventPresenter'
 
-export function MainDisplayRoute() {
-  const { data: tournament, error, isLoading } = useTournament()
+export function MainDisplayRoute(){const {data,error,isLoading}=useTournament();if(isLoading)return <DisplayState detail="Caricamento maxischermo"/>;if(error)return <DisplayState detail="Maxischermo non disponibile"/>;return <MainDisplayContent tournament={data}/>}
 
-  if (isLoading) return <DisplayState title="PADEL KAOS LIVE" detail="Caricamento tabellone" />
-  if (error) return <DisplayState title="PADEL KAOS LIVE" detail="Impossibile caricare lo schermo" />
-
-  return <MainDisplayContent tournament={tournament} />
+export function MainDisplayContent({tournament}:{tournament:Tournament}){
+  const round=getCurrentTurn(tournament);const matches=getTurnMatches(tournament);const pages=paginateMatches(matches);const [autoPage,setAutoPage]=useState(0)
+  const mode=tournament.mainDisplayMode??'auto';const fixed=Math.min(tournament.mainDisplayPage??0,Math.max(0,pages.length-1));const page=mode==='fixed'?fixed:autoPage%Math.max(1,pages.length)
+  const visible=pages[page]??[];const rolledAt=round?.diceRolledAt?new Date(round.diceRolledAt).getTime():0;const revealing=Date.now()-rolledAt<5500
+  useEffect(()=>{if(mode!=='auto'||pages.length<=1||revealing)return;const timer=window.setInterval(()=>setAutoPage(value=>(value+1)%pages.length),(tournament.mainDisplayIntervalSeconds??5)*1000);return()=>window.clearInterval(timer)},[mode,pages.length,revealing,tournament.mainDisplayIntervalSeconds])
+  const diceRule=tournament.diceRules.find(rule=>rule.id===round?.diceRuleId)
+  return <DisplayShell><GlobalDiceReveal tournament={tournament}/><CardPlayNotification tournament={tournament} enabled={tournament.displayCardNotificationsEnabled!==false}/><LiveEventPresenter tournament={tournament} audience="main_display"/><main data-display="scoreboard" className="grid h-[100svh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[#070707] px-[clamp(1rem,2.5vw,3rem)] py-[clamp(.8rem,2vh,2rem)] text-white">
+    <header className="flex items-end justify-between gap-5 border-b border-white/10 pb-3"><div className="min-w-0"><p className="text-sm font-black uppercase tracking-[.28em] text-[var(--event-primary)]">Padel Kaos · Maxischermo</p><div className="mt-1 flex items-baseline gap-5"><h1 className="truncate text-[clamp(2rem,4vw,4.5rem)] font-black">{round?.name??'Turno'}</h1><p className="text-[clamp(1rem,2vw,2rem)] font-black text-white/45">{turnLabel(matches)}</p></div></div>{diceRule&&<div className="max-w-[38vw] shrink-0 rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 py-2 text-right"><p className="text-xs font-black uppercase text-amber-200">Dado globale · {diceRule.value}</p><p className="truncate text-[clamp(1rem,2vw,2rem)] font-black uppercase">{diceRule.title}</p></div>}</header>
+    <AnimatePresence mode="wait" initial={false}><motion.section key={page} initial={{opacity:0,x:24}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-24}} transition={{duration:.38}} className={`grid min-h-0 gap-[clamp(.6rem,1.4vw,1.4rem)] py-3 ${globalLayout(visible.length)}`}>{visible.map(match=><GlobalMatchPanel key={match.id} tournament={tournament} match={match}/>)}</motion.section></AnimatePresence>
+    <footer className="flex items-center justify-between border-t border-white/10 pt-2 text-sm font-black text-white/45"><span>{matches.length} {matches.length===1?'campo':'campi'} nel turno</span>{pages.length>1&&<span>Campi {page*4+1}–{Math.min(page*4+visible.length,matches.length)} di {matches.length} · {Array.from({length:pages.length},(_,i)=>i===page?'●':'○').join(' ')}</span>}</footer>
+  </main></DisplayShell>
 }
-
-export function MainDisplayContent({ tournament }: { tournament: Tournament }) {
-  const mode = getMainDisplayMode(tournament)
-  const globalEvent = getFeaturedGlobalEvent(tournament)
-  const kaosMatch = getKaosMatch(tournament)
-  const diceRule = kaosMatch ? getDiceRuleForMatch(tournament, kaosMatch) : undefined
-  const winnerPlayer = tournament.teams.flatMap((team) => team.players).find((player) => player.id === globalEvent?.winnerPlayerId)
-  const winnerTeam = tournament.teams.find((team) => team.id === globalEvent?.winnerTeamId)
-
-  return (
-    <DisplayShell>
-      <main className="min-h-[85svh] bg-[#080808] px-6 py-8 text-white">
-        {mode === 'global_event_winner' ? (
-          <FullscreenPanel kicker="VINCITORE POR TRES" title={winnerPlayer?.nickname ?? 'VINCITORE'} detail={`${winnerTeam?.name ?? 'Squadra da definire'} · ${globalEvent?.prize ?? 'Premio da definire'}`} />
-        ) : null}
-
-        {mode === 'global_event_start' ? (
-          <FullscreenPanel kicker="SFIDA POR TRES" title="IL PRIMO POR TRES VINCE" detail={globalEvent?.prize ?? 'Premio da definire'} />
-        ) : null}
-
-        {mode === 'global_kaos' ? (
-          <FullscreenPanel
-            kicker="KAOS TIME"
-            title={diceRule ? `RISULTATO DADO: ${diceRule.value}` : 'IN ATTESA DEL DADO'}
-            detail={diceRule ? `${diceRule.title} · ${diceRule.description}` : 'Lancio globale in attesa'}
-          />
-        ) : null}
-
-        {mode === 'live_board' ? (
-          <section className="mx-auto grid max-w-none gap-6">
-            <header className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="text-xl font-black uppercase tracking-[0.2em] text-[var(--event-primary)]">PADEL KAOS LIVE</p>
-                <h1 className="mt-2 text-5xl font-black md:text-7xl">{tournament.name}</h1><p className="mt-3 text-xl font-bold">{tournament.rounds?.find(round => round.status !== 'completed')?.name ?? 'Evento in corso'}</p>
-              </div>
-              <p className="rounded bg-white/10 px-4 py-3 text-xl font-black">
-                <span className="mr-2 inline-block size-3 rounded-full bg-[#38E078]" />
-                {tournament.courts.length} CAMPI
-              </p>
-            </header>
-            {tournament.matches.length === 0 ? (
-              <p className="rounded border border-white/10 bg-[#171717] p-8 text-center text-2xl font-black text-white/60">Nessuna partita configurata</p>
-            ) : (
-              <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {tournament.matches.map((match) => (
-                  <MatchTile key={match.id} match={match} tournament={tournament} display />
-                ))}
-              </section>
-            )}
-          </section>
-        ) : null}
-      </main>
-    </DisplayShell>
-  )
-}
-
-const FullscreenPanel = EventOverlay
-
-function DisplayState({ title, detail }: { title: string; detail: string }) {
-  return (
-    <DisplayShell>
-      <main className="grid min-h-[85svh] place-items-center bg-[#080808] p-6 text-center text-white">
-        <div>
-          <p className="text-xl font-black uppercase tracking-[0.2em] text-[var(--event-primary)]">{title}</p>
-          <p className="mt-3 text-3xl font-black">{detail}</p>
-        </div>
-      </main>
-    </DisplayShell>
-  )
-}
+function GlobalMatchPanel({tournament,match}:{tournament:Tournament;match:Match}){const court=tournament.courts.find(item=>item.id===match.courtId);const a=tournament.teams.find(item=>item.id===match.teamAId);const b=tournament.teams.find(item=>item.id===match.teamBId);const history=setHistory(tournament,match);const waiting=['scheduled','ready','lineup'].includes(match.status);return <article className="grid min-h-0 grid-rows-[auto_1fr_auto] overflow-hidden border border-white/15 bg-[#111] p-[clamp(.7rem,1.4vw,1.4rem)]"><header className="flex items-center justify-between gap-3"><p className="text-[clamp(.75rem,1.1vw,1.1rem)] font-black uppercase tracking-[.18em] text-[var(--event-primary)]">{court?.name??'Campo'}</p><p className="text-[clamp(.75rem,1.1vw,1.1rem)] font-black uppercase">{displayStatus(match)}</p></header><div className="grid min-h-0 grid-cols-[1fr_auto_1fr] items-center gap-3 py-2"><CompactTeam name={a?.name} pair={currentPair(tournament,match,match.teamAId)}/><div className="text-center">{waiting?<p className="text-lg font-black text-white/35">IN ATTESA</p>:<p className="whitespace-nowrap text-[clamp(3.8rem,7vw,8rem)] font-black leading-none tabular-nums">{match.score.games.A}<span className="mx-2 text-white/20">–</span>{match.score.games.B}</p>}<SetTimer match={match} size="compact"/><p className="mt-2 text-xs font-black text-white/45">{history.map(item=>`S${item.set} ${item.gamesA}–${item.gamesB}`).join(' · ')||'Nessun set concluso'}</p></div><CompactTeam name={b?.name} pair={currentPair(tournament,match,match.teamBId)} right/></div><div className="grid gap-1"><ActiveDiceIndicator tournament={tournament} match={match}/><ActiveCardEffects tournament={tournament} match={match}/></div></article>}
+function CompactTeam({name,pair,right}:{name?:string;pair?:string[];right?:boolean}){return <div className={`min-w-0 ${right?'text-right':''}`}><h2 className="truncate text-[clamp(1.2rem,2.2vw,2.5rem)] font-black uppercase">{name??'Squadra'}</h2><div className="mt-2 space-y-1 text-[clamp(.7rem,1.15vw,1.1rem)] font-bold text-white/65">{pair?.length?pair.map(player=><p key={player} className="truncate">{player}</p>):<p>Formazione non disponibile</p>}</div></div>}
+function turnLabel(matches:Match[]){if(matches.some(m=>m.score.currentSet===3))return'Super Tie-Break';if(matches.some(m=>m.status==='live_set_2'))return'Set 2';if(matches.some(m=>m.status==='set_break'))return'Intervallo';if(matches.some(m=>m.status==='live_set_1'))return'Set 1';return'In attesa'}
+function DisplayState({detail}:{detail:string}){return <DisplayShell><main className="grid h-[100svh] place-items-center bg-[#070707] p-8 text-center"><div><p className="text-xl font-black uppercase tracking-[.25em] text-[var(--event-primary)]">Padel Kaos Live</p><h1 className="mt-4 text-5xl font-black">{detail}</h1></div></main></DisplayShell>}

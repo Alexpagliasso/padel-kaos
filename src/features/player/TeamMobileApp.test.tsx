@@ -98,6 +98,32 @@ describe('Team mobile app navigation', () => {
     expect(tournament.matches.find(match => match.id === 'match-red-2')).toBeTruthy()
   })
 
+  it('shows the preparation state for a new match without carrying the previous hand', () => {
+    renderApp(value => {
+      value.matches.push({ ...value.matches[0], id: 'match-red-2', teamBId: 'team-yellow', courtId: 'court-2', status: 'scheduled', lineups: [], score: { ...value.matches[0].score, currentSet: 1 } })
+    })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Seleziona partita' }), { target: { value: 'match-red-2' } })
+    expect(screen.getByText('CARTE NON ANCORA ASSEGNATE')).toBeTruthy()
+    expect(screen.getByText("Le carte per questa partita verranno assegnate dalla Regia prima dell'inizio del turno.")).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Apri carte, nessuna disponibile' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('moves from the completed current match to the next match after a realtime refresh', async () => {
+    const tournament = createDemoTournament()
+    tournament.matches.push({ ...tournament.matches[0], id: 'match-red-next', teamBId: 'team-yellow', courtId: 'court-2', status: 'scheduled', lineups: [], score: { ...tournament.matches[0].score, currentSet: 1 } })
+    const first = resolvePlayerRouteState({ provider: 'demo', tournament, demoSelectedTeamId: 'team-red' })
+    if (first.type !== 'ready') throw new Error('Stato Team non pronto')
+    const view = render(<QueryClientProvider client={new QueryClient()}><TeamMobileApp tournament={tournament} events={[]} routeState={first} onSelectDemoTeam={vi.fn()} onPlayDemoCard={vi.fn()} /></QueryClientProvider>)
+    expect((screen.getByRole('combobox', { name: 'Seleziona partita' }) as HTMLSelectElement).value).toBe('match-demo-1')
+    tournament.matches[0].status = 'completed'
+    tournament.matches[0].resultConfirmedAt = '2026-09-19T10:00:00Z'
+    const refreshed = resolvePlayerRouteState({ provider: 'demo', tournament, demoSelectedTeamId: 'team-red' })
+    if (refreshed.type !== 'ready') throw new Error('Stato Team non pronto')
+    view.rerender(<QueryClientProvider client={new QueryClient()}><TeamMobileApp tournament={tournament} events={[]} routeState={refreshed} onSelectDemoTeam={vi.fn()} onPlayDemoCard={vi.fn()} /></QueryClientProvider>)
+    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Seleziona partita' }) as HTMLSelectElement).value).toBe('match-red-next'))
+    expect(screen.getByText('CARTE NON ANCORA ASSEGNATE')).toBeTruthy()
+  })
+
   it('opens the exact match selected from Risultati', async () => {
     renderApp(value => value.matches.push({ ...value.matches[0], id: 'match-red-2', teamBId: 'team-yellow', courtId: 'court-2', status: 'completed', lineups: [], score: { ...value.matches[0].score, currentSet: 2 } }))
     fireEvent.click(screen.getByRole('button', { name: 'Risultati' }))
@@ -153,7 +179,7 @@ describe('interactive Team card deck', () => {
     expect(document.querySelector('[data-card-experience="fullscreen"]')).toBeTruthy()
     if (count > 1) expect(screen.getByLabelText(`Carta 1 di ${count}`)).toBeTruthy()
     if (count > 1) { fireEvent.click(screen.getByRole('button', { name: 'Carta successiva' })); expect(screen.getByLabelText(`Carta 2 di ${count}`)).toBeTruthy() }
-    expect(screen.getAllByRole('button', { name: 'Utilizza' })[0].hasAttribute('disabled')).toBe(true)
+    expect(screen.getAllByRole('button', { name: 'Utilizza' })[0].hasAttribute('disabled')).toBe(false)
   })
 
   it('opens details inside the fullscreen experience and returns to the same card', () => {

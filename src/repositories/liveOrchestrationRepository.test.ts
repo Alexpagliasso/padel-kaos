@@ -10,6 +10,7 @@ describe('live orchestration repository', () => {
   })
 
   it('maps operational failures to Italian messages', () => {
+    expect(mapLiveError('round cards incomplete: {}')).toBe('ASSEGNA LE CARTE PRIMA DI AVVIARE IL TURNO.')
     expect(mapLiveError('cards already assigned')).toContain('già state assegnate')
     expect(mapLiveError('one or more match lineups are missing')).toContain('formazioni')
     expect(mapLiveError('not authorized')).toContain('Non sei autorizzato')

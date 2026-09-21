@@ -1,74 +1,31 @@
-import { MatchTimer } from '../shared/components/MatchTimer'
+import { motion,useReducedMotion } from 'framer-motion'
 import { DisplayShell } from '../shared/components/Foundation'
-import { Scoreboard } from '../shared/components/Scoreboard'
-import { LineupStrip } from '../shared/components/LineupStrip'
-import { DiceRoll } from '../shared/components/DiceRoll'
-import { GlobalEventOverlay } from '../shared/components/GlobalEventOverlay'
-import { EventPresentationOverlay } from '../shared/components/EventPresentationOverlay'
 import { useRoleTournament as useTournament } from '../features/admin/preview/useRoleTournament'
-import { getCourt, getDiceRuleForMatch, getTeam } from '../features/tournament/selectors'
-import { useEventRepository } from '../repositories/eventRepository'
 import { useMatchRepository } from '../repositories/matchRepository'
+import { ActiveCardEffects,ActiveDiceIndicator,CardPlayNotification,GlobalDiceReveal } from '../shared/components/LiveEffects'
+import { currentPair,displayStatus,getCourtDisplayMatch,setHistory } from '../features/display/displayModel'
+import type { Match,Team,Tournament } from '../shared/types/domain'
+import { useAuth } from '../features/auth/authContext'
+import { SetTimer } from '../shared/components/SetTimer'
+import { LiveEventPresenter } from '../shared/components/LiveEventPresenter'
 
-export function CourtDisplayRoute() {
-  const { data: tournament } = useTournament()
-  const matchRepo = useMatchRepository()
-  const events = useEventRepository().events
-
-  const court = getCourt(tournament, matchRepo.selectedCourtId) ?? tournament.courts[0]
-  const match = court ? tournament.matches.find((item) => item.courtId === court.id) ?? tournament.matches[0] : tournament.matches[0]
-  if (!court || !match) {
-    return (
-      <DisplayShell>
-        <main className="mx-auto grid min-h-[85svh] max-w-none content-center px-6 py-8">
-          <section className="rounded border border-white/10 bg-[#171717] p-8 text-center">
-            <p className="text-lg font-black uppercase tracking-[0.2em] text-[var(--event-primary)]">Schermo campo</p>
-            <h1 className="mt-3 text-4xl font-black">Nessuna partita configurata</h1>
-          </section>
-        </main>
-      </DisplayShell>
-    )
-  }
-  const teamA = getTeam(tournament, match.teamAId)
-  const teamB = getTeam(tournament, match.teamBId)
-  const diceRule = getDiceRuleForMatch(tournament, match)
-  const activeGlobal = tournament.globalEvents.find((event) => event.status === 'active' || event.status === 'completed')
-  const activeCard = tournament.teamCards.find((teamCard) => teamCard.state === 'active' && match.activeCardUsageIds.includes(teamCard.id))
-  const activeCardDefinition = tournament.cards.find((card) => card.id === activeCard?.cardId)
-  const isKaosPending = match.status === 'kaos_pending' || match.status === 'kaos_reveal'
-
-  return (
-    <DisplayShell>
-      <main className="mx-auto grid min-h-[85svh] max-w-none content-center gap-6 px-6 py-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-lg font-black uppercase tracking-[0.2em] text-[var(--event-primary)]">{tournament.name} / {court.name}</p>
-            <h1 className="text-5xl font-black md:text-7xl">{teamA?.shortName} vs {teamB?.shortName}</h1>
-          </div>
-
-        </div>
-        {isKaosPending ? (
-          <section className="rounded border border-[var(--event-primary)] bg-[var(--event-primary)] p-10 text-center text-black">
-            <p className="text-xl font-black uppercase tracking-[0.22em]">KAOS TIME</p>
-            <h2 className="mt-3 text-7xl font-black">IN ATTESA DEL DADO</h2>
-          </section>
-        ) : (
-          <EventPresentationOverlay events={events.filter((event) => !event.matchId || event.matchId === match.id)} />
-        )}
-        <Scoreboard match={match} teamA={teamA} teamB={teamB} display />
-        <MatchTimer match={match} tournament={tournament} />
-        <LineupStrip match={match} teamA={teamA} teamB={teamB} display />
-        <div className="grid gap-4 md:grid-cols-3">
-          {diceRule ? <DiceRoll value={diceRule.value} label={diceRule.title} /> : null}
-          {activeCardDefinition ? (
-            <div className="rounded border border-[var(--event-primary)]/30 bg-[var(--event-primary)]/10 p-4">
-              <p className="text-sm font-black uppercase text-[var(--event-primary)]">Carta attiva</p>
-              <p className="text-2xl font-black">{activeCardDefinition.name}</p>
-            </div>
-          ) : null}
-          <GlobalEventOverlay event={activeGlobal} />
-        </div>
-      </main>
-    </DisplayShell>
-  )
+export function CourtDisplayRoute(){
+  const {data:tournament}=useTournament();const repo=useMatchRepository();const {profile}=useAuth()
+  const securedCourtId=profile?.role==='court_display'?profile.courtId:repo.selectedCourtId
+  const court=tournament.courts.find(item=>item.id===securedCourtId)??tournament.courts[0]
+  const match=court?getCourtDisplayMatch(tournament,court.id):undefined
+  if(!court||!match)return <DisplayShell><main className="grid h-[100svh] place-items-center bg-[#070707] p-8 text-center"><div><p className="text-xl font-black uppercase tracking-[.24em] text-[var(--event-primary)]">Schermo campo</p><h1 className="mt-4 text-5xl font-black">Nessuna partita configurata</h1></div></main></DisplayShell>
+  return <CourtPresentation tournament={tournament} match={match} courtName={court.name}/>
 }
+
+export function CourtPresentation({tournament,match,courtName}:{tournament:Tournament;match:Match;courtName:string}){
+  const teamA=tournament.teams.find(item=>item.id===match.teamAId);const teamB=tournament.teams.find(item=>item.id===match.teamBId)
+  const history=setHistory(tournament,match);const waiting=['scheduled','ready','lineup'].includes(match.status)
+  return <DisplayShell><GlobalDiceReveal tournament={tournament}/><CardPlayNotification tournament={tournament} matchIds={[match.id]} enabled={tournament.displayCardNotificationsEnabled!==false}/><LiveEventPresenter tournament={tournament} audience="court_display" matchIds={[match.id]} courtId={match.courtId}/><main data-display="scoreboard" className="grid h-[100svh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[#070707] px-[clamp(1.25rem,3vw,4rem)] py-[clamp(1rem,2.5vh,2.5rem)] text-white">
+    <header className="flex items-center justify-between gap-6 border-b border-white/10 pb-3"><div className="min-w-0"><p className="truncate text-[clamp(.8rem,1.2vw,1.2rem)] font-black uppercase tracking-[.24em] text-[var(--event-primary)]">{tournament.name}</p><h1 className="text-[clamp(2rem,4vw,4.5rem)] font-black uppercase">{courtName}</h1></div><div className="shrink-0 text-right"><p className="text-[clamp(.75rem,1vw,1rem)] font-black uppercase text-white/45">Stato partita</p><p className="text-[clamp(1.5rem,3vw,3.5rem)] font-black text-[var(--event-primary)]">{displayStatus(match)}</p></div></header>
+    <section className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-[clamp(1rem,4vw,5rem)] py-4"><TeamSide team={teamA} pair={currentPair(tournament,match,match.teamAId)} align="left"/><div className="text-center"><p className="text-xs font-black uppercase tracking-[.25em] text-white/35">{waiting?'Punteggio':'Game'}</p>{waiting?<p className="mt-5 text-[clamp(2rem,5vw,5rem)] font-black text-white/35">IN ATTESA</p>:<div className="mt-2 flex items-center gap-[clamp(1rem,3vw,3rem)]"><AnimatedScore value={match.score.games.A}/><span className="text-[clamp(2rem,5vw,5rem)] text-white/25">—</span><AnimatedScore value={match.score.games.B}/></div>}<div className="mt-5 flex justify-center gap-3">{history.map(item=><span key={item.set} className="rounded border border-white/15 bg-white/[.05] px-4 py-2 text-[clamp(.8rem,1.3vw,1.3rem)] font-black">SET {item.set} · {item.gamesA}–{item.gamesB}</span>)}</div></div><TeamSide team={teamB} pair={currentPair(tournament,match,match.teamBId)} align="right"/></section>
+    <footer className="grid grid-cols-[minmax(220px,.45fr)_1fr] gap-3 border-t border-white/10 pt-3"><SetTimer match={match} size="display"/><div className="grid gap-2"><ActiveDiceIndicator tournament={tournament} match={match}/><ActiveCardEffects tournament={tournament} match={match}/></div></footer>
+  </main></DisplayShell>
+}
+function TeamSide({team,pair,align}:{team?:Team;pair?:string[];align:'left'|'right'}){return <div className={`min-w-0 ${align==='right'?'text-right':''}`}><h2 className="truncate text-[clamp(2rem,4.5vw,5.5rem)] font-black uppercase leading-none">{team?.name??'Squadra'}</h2><div className="mt-[clamp(1rem,3vh,2rem)] space-y-2">{pair?.length===2?pair.map(name=><p key={name} className="truncate text-[clamp(1.1rem,2vw,2.2rem)] font-bold text-white/70">{name}</p>):<p className="text-[clamp(1rem,1.5vw,1.5rem)] font-bold text-white/35">Formazione non disponibile</p>}</div></div>}
+function AnimatedScore({value}:{value:number}){const reduced=useReducedMotion();return <motion.strong key={value} initial={reduced?false:{scale:1.22,color:'var(--event-primary)'}} animate={{scale:1,color:'#fff'}} className="text-[clamp(6rem,16vw,18rem)] font-black tabular-nums leading-none">{value}</motion.strong>}

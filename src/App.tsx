@@ -16,6 +16,8 @@ import { ControlRoom } from './features/admin/control-room/ControlRoom'
 import { AdminAccess } from './features/admin/access/AdminAccess'
 import { AdminRecovery } from './features/admin/recovery/AdminRecovery'
 import { AdminCalendar } from './features/admin/calendar/AdminCalendar'
+import { AdminStandings } from './features/admin/standings/AdminStandings'
+import { AdminResults } from './features/admin/results/AdminResults'
 
 function App() {
   return (
@@ -30,6 +32,8 @@ function App() {
         <Route path="teams" element={<TournamentSetupPage key="teams" initialSection="TEAMS" />} />
         <Route path="groups" element={<TournamentSetupPage key="groups" initialSection="GROUPS" />} />
         <Route path="calendar" element={<AdminCalendar />} />
+        <Route path="standings" element={<AdminStandings />} />
+        <Route path="results" element={<AdminResults />} />
         <Route path="appearance" element={<TournamentSetupPage key="appearance" />} />
         <Route path="control-room" element={<ControlRoom />} />
         <Route path="access" element={<AdminAccess />} />

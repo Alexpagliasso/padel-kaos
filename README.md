@@ -4,7 +4,7 @@ Realtime-style demo app for a padel tournament inspired by sport entertainment f
 
 ## Demo Mode
 
-This project currently defaults to a completely browser-only demo.
+Local development defaults to a completely browser-only demo when `VITE_DATA_PROVIDER` is unset.
 
 It does not connect to Supabase, does not require real authentication, and does not use WebSockets. The Supabase client and schema remain in the codebase for the future production path.
 
@@ -55,7 +55,7 @@ The demo state is persisted with `localStorage` and synchronized across tabs wit
 
 ## Supabase Provider
 
-The app is prepared for:
+The app uses the existing Supabase project when configured with:
 
 ```bash
 VITE_DATA_PROVIDER=supabase
@@ -65,6 +65,23 @@ VITE_AUTH_TOURNAMENT_SLUG=padel-kaos
 ```
 
 Do not put service role keys, passwords, or secrets in frontend env files.
+
+## Vercel deployment preparation
+
+Import this repository as a **Vite** project. Use the repository root, `npm install`, `npm run build`, and the `dist` output directory. `vercel.json` rewrites deep React Router paths to `index.html`, including refreshes of `/login`, `/admin/*`, `/player/*`, `/referee/*`, `/court-display`, and `/main-display`.
+
+Set these **Production** environment variables in Vercel using values from the existing Supabase project:
+
+```txt
+VITE_DATA_PROVIDER=supabase
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your-key
+VITE_AUTH_TOURNAMENT_SLUG=padel-kaos
+```
+
+Use the actual public Supabase URL and publishable key, and match the auth slug already used when provisioning accounts. Never place a service role key or database credential in a `VITE_` variable. The Vercel build embeds `VITE_` values in the browser bundle. Keep Edge Function secrets in Supabase. Configure the eventual Vercel origin in Supabase Authentication URL settings before testing login. The app does not hardcode that origin.
+
+Production never uses demo data. Missing or invalid browser configuration shows a short Italian error screen instead of a fake tournament. Deploying or changing Vercel/Supabase settings is a separate manual step.
 
 React components use repository hooks, not Supabase directly:
 

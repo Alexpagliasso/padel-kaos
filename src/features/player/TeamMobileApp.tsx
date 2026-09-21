@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, CalendarDays, Check, ChevronLeft, ChevronRight, CreditCard, Info, Mars, Swords, Table2, Venus, X } from 'lucide-react'
 import { Dialog, IconButton } from '@mui/material'
@@ -12,6 +12,12 @@ import type { DemoEvent } from '../../demo/demoTypes'
 import { EventPresentationOverlay } from '../../shared/components/EventPresentationOverlay'
 import { GlobalEventOverlay } from '../../shared/components/GlobalEventOverlay'
 import { getDiceRuleForMatch } from '../tournament/selectors'
+import { formatCountdown, getDiceEffect } from '../../domain/live/readiness'
+import { ActiveCardEffects, ActiveDiceIndicator, CardPlayNotification, GlobalDiceReveal } from '../../shared/components/LiveEffects'
+import { SetTimer } from '../../shared/components/SetTimer'
+import { useSharedClock } from '../../shared/hooks/useSharedClock'
+import { groupStandings } from '../../domain/standings/groupStandings'
+import { LiveEventPresenter } from '../../shared/components/LiveEventPresenter'
 
 type TeamTab = 'match' | 'standings' | 'results'
 
@@ -20,18 +26,26 @@ export function TeamMobileApp({ tournament, events, routeState, onSelectDemoTeam
   events: DemoEvent[]
   routeState: Extract<PlayerRouteState, { type: 'ready' }>
   onSelectDemoTeam: (teamId: string) => void
-  onPlayDemoCard: (teamCardId: string) => string
+  onPlayDemoCard: (teamCardId: string) => string | Promise<string>
   headerAction?: ReactNode
 }) {
   const [tab, setTab] = useState<TeamTab>('match')
   const [selectedMatchId, setSelectedMatchId] = useState(routeState.match.id)
   const [deckOpen, setDeckOpen] = useState(false)
+  const previousCurrentMatchId = useRef(routeState.match.id)
   const { playerTeam, matches, cards, greetingName, showDemoTeamSelector } = routeState
-  useEffect(() => { if (!matches.some(item => item.id === selectedMatchId)) setSelectedMatchId(routeState.match.id) }, [matches, routeState.match.id, selectedMatchId])
+  useEffect(() => {
+    if (!matches.some(item => item.id === selectedMatchId) || selectedMatchId === previousCurrentMatchId.current) {
+      setSelectedMatchId(routeState.match.id)
+    }
+    previousCurrentMatchId.current = routeState.match.id
+  }, [matches, routeState.match.id, selectedMatchId])
   const match = matches.find(item => item.id === selectedMatchId) ?? routeState.match
   const matchCards = getOwnMatchCards(cards, playerTeam.id, match.id)
+  const diceEffect = getDiceEffect(tournament, match)
 
-  return <MobileRoleShell title={playerTeam.name} status={tournament.status ?? match.status} action={headerAction}>
+  return <MobileRoleShell title={playerTeam.name} status={tournament.status ?? match.status} action={headerAction}><CardPlayNotification tournament={tournament} matchIds={[match.id]} excludeTeamId={playerTeam.id}/><LiveEventPresenter tournament={tournament} audience="team" matchIds={[match.id]} teamId={playerTeam.id}/>
+    <GlobalDiceReveal tournament={tournament} />
     <main className="mx-auto w-full max-w-3xl overflow-x-hidden px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-4">
       <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
         <div className="min-w-0"><p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">{showDemoTeamSelector ? 'Demo giocatore' : 'Area giocatore'}</p><p className="truncate text-sm text-white/60">Ciao {greetingName}</p></div>
@@ -45,8 +59,8 @@ export function TeamMobileApp({ tournament, events, routeState, onSelectDemoTeam
         </motion.div>
       </AnimatePresence>
     </main>
-    <TeamBottomNavigation active={tab} cardsCount={matchCards.length} onChange={setTab} onOpenCards={() => setDeckOpen(true)} />
-    <TeamCardDeck open={deckOpen} onClose={() => setDeckOpen(false)} cards={matchCards} definitions={tournament.cards} demo={showDemoTeamSelector} onPlayDemoCard={onPlayDemoCard} />
+    <TeamBottomNavigation active={tab} cardsCount={tournament.cardsEnabled===false?0:matchCards.length} onChange={setTab} onOpenCards={() => setDeckOpen(true)} />
+    <TeamCardDeck open={deckOpen&&tournament.cardsEnabled!==false} onClose={() => setDeckOpen(false)} cards={matchCards} definitions={tournament.cards} demo={showDemoTeamSelector} onPlayDemoCard={onPlayDemoCard} blockedReason={diceEffect.active ? 'Carte bloccate durante l’effetto del dado' : undefined} />
   </MobileRoleShell>
 }
 
@@ -62,11 +76,13 @@ export function TeamBottomNavigation({ active, cardsCount, onChange, onOpenCards
 function NavItem({ item, active, onChange }: { item: { id: TeamTab; label: string; icon: typeof Swords }; active: TeamTab; onChange: (tab: TeamTab) => void }) { const selected = active === item.id; return <button type="button" aria-current={selected ? 'page' : undefined} onClick={() => onChange(item.id)} className={`grid min-h-14 place-items-center gap-1 rounded-xl text-xs font-black uppercase tracking-wide transition ${selected ? 'bg-[var(--event-primary)]/15 text-[var(--event-primary)]' : 'text-white/55'}`}><item.icon className="size-5" />{item.label}</button> }
 
 function TeamMatchTab({ tournament, events, team, match, matches, onSelectMatch }: { tournament: Tournament; events: DemoEvent[]; team: Team; match: Match; matches: Match[]; onSelectMatch: (id: string) => void }) {
+  const diceNow = useSharedClock()
   const opponent = tournament.teams.find(item => item.id === (match.teamAId === team.id ? match.teamBId : match.teamAId))
   const round = tournament.rounds?.find(item => item.id === match.roundId)
   const court = tournament.courts.find(item => item.id === match.courtId)
   const live = ['live', 'live_set_1', 'live_set_2'].includes(match.status)
   const diceRule = getDiceRuleForMatch(tournament, match)
+  const diceEffect = getDiceEffect(tournament, match, diceNow)
   const globalEvent = tournament.globalEvents.find(event => event.status === 'active' || event.status === 'completed')
   return <div className="grid gap-4">
     <EventPresentationOverlay events={events} />
@@ -75,11 +91,26 @@ function TeamMatchTab({ tournament, events, team, match, matches, onSelectMatch 
       <div className="absolute -right-12 -top-12 size-36 rounded-full bg-[var(--event-primary)]/10 blur-3xl" />
       <div className="relative text-center"><div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-white/60"><span>{round?.name ?? 'Turno'}</span><span>·</span><span>{court?.name ?? 'Campo da assegnare'}</span></div>{live && <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-black uppercase text-emerald-300"><span className="size-2 rounded-full bg-emerald-300" />In corso</p>}<div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3"><h1 className="min-w-0 break-words text-xl font-black leading-tight">{team.name}</h1><span className="text-sm font-black text-[var(--event-primary)]">VS</span><h2 className="min-w-0 break-words text-xl font-black leading-tight">{opponent?.name ?? 'Avversario'}</h2></div><p className="mt-5 text-2xl font-black">{matchSetLabel(match)}</p><p className="mt-1 text-sm text-white/60">{matchStatusLabel(match.status)}</p></div>
     </section>
+    <SetTimer match={match} size="large" />
+    <TeamCardLiveNotice tournament={tournament} match={match} team={team} />
+    <TeamCardAssignmentState tournament={tournament} match={match} team={team} />
     <section className="rounded-xl border border-white/10 bg-white/[.04] p-3"><p className="text-xs font-black uppercase tracking-[.16em] text-white/45">Stato partita</p><p className="mt-1 text-base font-black text-[var(--event-primary)]">{matchStatusLabel(match.status)}</p></section>
+    <ActiveDiceIndicator tournament={tournament} match={match} />
+    <ActiveCardEffects tournament={tournament} match={match} viewerTeamId={team.id} />
     <TeamSetAccordion tournament={tournament} team={team} opponent={opponent} match={match} />
-    {diceRule && <section className="rounded-2xl border border-[var(--event-primary)]/25 bg-[var(--event-primary)]/10 p-4"><p className="text-xs font-black uppercase text-[var(--event-primary)]">Regola Kaos</p><p className="mt-1 font-black">{diceRule.title}</p><p className="mt-1 text-sm text-white/65">{diceRule.description}</p></section>}
+    {diceRule && <section className="rounded-2xl border border-[var(--event-primary)]/25 bg-[var(--event-primary)]/10 p-4"><p className="text-xs font-black uppercase text-[var(--event-primary)]">Dado globale · {diceRule.value}</p><p className="mt-1 font-black">{diceRule.title}</p><p className="mt-1 text-sm text-white/65">{diceRule.description}</p>{diceEffect.active && <p className="mt-2 font-black text-amber-300">Carte bloccate · {formatCountdown(diceEffect.remainingSeconds)}</p>}</section>}
     <GlobalEventOverlay event={globalEvent} />
   </div>
+}
+
+function TeamCardAssignmentState({ tournament, match, team }: { tournament: Tournament; match: Match; team: Team }) {
+  if (tournament.cardsEnabled === false || match.resultConfirmedAt || match.status === 'completed') return null
+  const assigned = tournament.teamCards.some(card => card.matchId === match.id && card.teamId === team.id)
+  if (assigned) return null
+  return <aside className="rounded-xl border border-amber-300/40 bg-amber-300/10 p-4">
+    <p className="text-xs font-black uppercase tracking-[.16em] text-amber-200">CARTE NON ANCORA ASSEGNATE</p>
+    <p className="mt-2 text-sm font-bold text-white/70">Le carte per questa partita verranno assegnate dalla Regia prima dell'inizio del turno.</p>
+  </aside>
 }
 
 function TeamSetAccordion({ tournament, team, opponent, match }: { tournament: Tournament; team: Team; opponent?: Team; match: Match }) {
@@ -97,6 +128,16 @@ function TeamSetAccordion({ tournament, team, opponent, match }: { tournament: T
       <AnimatePresence initial={false}>{expanded && <motion.div id={`team-set-${match.id}-${setNumber}`} initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden"><div className="grid gap-4 border-t border-white/10 p-3 sm:grid-cols-2"><TeamOwnSetLineup tournament={tournament} team={team} match={match} setNumber={setNumber} editable={setNumber < 3 && !started && match.status !== 'completed'} /><ReadOnlyLineup title="Formazione avversaria" lineup={match.lineups.find(item => item.teamId === opponent?.id && item.setNumber === setNumber)} team={opponent} unavailable="Formazione avversaria non ancora disponibile" /></div></motion.div>}</AnimatePresence>
     </article>
   })}</section>
+}
+
+function TeamCardLiveNotice({ tournament, match, team }: { tournament: Tournament; match: Match; team: Team }) {
+  const pending = tournament.teamCards.filter(card => card.matchId === match.id && card.teamId !== team.id && card.state === 'pending')
+  const rejected = tournament.teamCards.filter(card => card.matchId === match.id && card.teamId === team.id && card.state === 'cancelled').at(-1)
+  return <>{pending.map(card => {
+    const owner = tournament.teams.find(item => item.id === card.teamId)
+    const definition = tournament.cards.find(item => item.id === card.cardId)
+    return <aside key={card.id} className="rounded-xl border border-amber-300/50 bg-amber-300/10 p-4"><p className="text-xs font-black uppercase tracking-[.16em] text-amber-200">Carta giocata</p><p className="mt-1 text-xl font-black">{owner?.name} · {definition?.name}</p><p className="mt-1 font-bold text-white/65">In attesa dell’arbitro</p></aside>
+  })}{rejected && <aside className="rounded-xl border border-red-300/40 bg-red-400/10 p-4 font-black text-red-100">Carta non confermata · {tournament.cards.find(item => item.id === rejected.cardId)?.name}</aside>}</>
 }
 
 function TeamOwnSetLineup({ tournament, team, match, setNumber, editable }: { tournament: Tournament; team: Team; match: Match; setNumber: number; editable: boolean }) {
@@ -122,10 +163,13 @@ function TeamOwnSetLineup({ tournament, team, match, setNumber, editable }: { to
 function ReadOnlyLineup({ title, lineup, team, unavailable }: { title: string; lineup?: Match['lineups'][number]; team?: Team; unavailable: string }) { return <div><p className="flex min-h-11 items-center text-xs font-black uppercase tracking-[.12em] text-white/45">{title}</p>{lineup && team ? <LineupPlayers lineup={lineup} team={team} /> : <p className="text-sm text-white/55">{unavailable}</p>}</div> }
 function LineupPlayers({ lineup, team }: { lineup: Match['lineups'][number]; team: Team }) { return <div className="grid gap-1.5">{lineup.activePlayerIds.map(id => { const player = team.players.find(item => item.id === id); const Gender = player?.gender === 'woman' ? Venus : player?.gender === 'man' ? Mars : null; return <div key={id} className="flex min-h-11 items-center justify-between rounded-lg bg-black/25 px-3"><span className="text-sm font-bold">{player ? getPlayerDisplayName(player) : 'Giocatore'}</span>{player && <span className="flex items-center gap-1 text-xs text-white/50">{Gender && <Gender className="size-3.5" />}{genderLabel(player.gender)}</span>}</div> })}</div> }
 
-export function TeamCardDeck({ open, onClose, cards, definitions, demo, onPlayDemoCard }: { open: boolean; onClose: () => void; cards: TeamCard[]; definitions: CardDefinition[]; demo: boolean; onPlayDemoCard: (id: string) => string }) {
+export function TeamCardDeck({ open, onClose, cards, definitions, demo: _demo, onPlayDemoCard, blockedReason }: { open: boolean; onClose: () => void; cards: TeamCard[]; definitions: CardDefinition[]; demo: boolean; onPlayDemoCard: (id: string) => string | Promise<string>; blockedReason?: string }) {
   const [index, setIndex] = useState(0)
   const [detail, setDetail] = useState<{ teamCard: TeamCard; definition: CardDefinition } | null>(null)
   const reducedMotion = useReducedMotion()
+  const [pendingCardId, setPendingCardId] = useState('')
+  const [cardFeedback, setCardFeedback] = useState('')
+  const now = useSharedClock()
   useEffect(() => { if (open) { setIndex(0); setDetail(null) } }, [open])
   const visible = cards.map(teamCard => ({ teamCard, definition: definitions.find(card => card.id === teamCard.cardId) })).filter((item): item is { teamCard: TeamCard; definition: CardDefinition } => Boolean(item.definition))
   const move = (direction: number) => setIndex(current => visible.length ? (current + direction + visible.length) % visible.length : 0)
@@ -145,7 +189,7 @@ export function TeamCardDeck({ open, onClose, cards, definitions, demo, onPlayDe
         {detail ? <motion.main key="detail" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} transition={{ duration: reducedMotion ? 0 : .16 }} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5">
           <div className="mx-auto max-w-xl">
             {detail.definition.imageUrl ? <div className="h-[clamp(220px,42svh,360px)] bg-black/30 p-2"><img src={detail.definition.imageUrl} alt="" className="h-full w-full object-contain" /></div> : <div className="grid h-[clamp(220px,42svh,360px)] place-items-center bg-gradient-to-br from-[var(--event-primary)]/35 to-black"><Swords className="size-20 text-[var(--event-primary)]" /></div>}
-            <div className="py-4"><h1 className="text-3xl font-black leading-tight">{detail.definition.name}</h1><div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-[var(--event-primary)]/15 px-3 py-1 text-xs font-black text-[var(--event-primary)]">{cardStateLabel(detail.teamCard.state)}</span><span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold">Durata · {durationLabel(detail.definition.durationType, detail.definition.durationValue)}</span></div><p className="mt-5 text-xs font-black uppercase tracking-[.16em] text-white/45">Descrizione</p><p className="mt-2 whitespace-pre-line text-base leading-relaxed text-white/75">{detail.definition.longDescription || detail.definition.description}</p></div>
+            <div className="py-4"><h1 className="text-3xl font-black leading-tight">{detail.definition.name}</h1><div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-[var(--event-primary)]/15 px-3 py-1 text-xs font-black text-[var(--event-primary)]">{effectiveCardStateLabel(detail.teamCard, now)}</span><span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold">Durata · {durationLabel(detail.definition.durationType, detail.definition.durationValue)}</span></div><p className="mt-5 text-xs font-black uppercase tracking-[.16em] text-white/45">Descrizione</p><p className="mt-2 whitespace-pre-line text-base leading-relaxed text-white/75">{detail.definition.longDescription || detail.definition.description}</p></div>
           </div>
         </motion.main> : <motion.main key="hand" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? 0 : .12 }} className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
           <div className="relative min-h-0 flex-1 overflow-hidden">
@@ -172,11 +216,12 @@ export function TeamCardDeck({ open, onClose, cards, definitions, demo, onPlayDe
                 >
                   {item.definition.imageUrl ? <div className="h-[48%] shrink-0 bg-black/35 p-1"><img src={item.definition.imageUrl} alt="" className="h-full w-full object-contain" /></div> : <div className="grid h-[48%] shrink-0 place-items-center bg-gradient-to-br from-[var(--event-primary)]/35 to-black"><Swords className="size-20 text-[var(--event-primary)]" /></div>}
                   <div className={`flex min-h-0 flex-1 flex-col p-[clamp(.75rem,2svh,1.15rem)] ${front ? '' : 'opacity-0'}`}>
-                    <p className="text-[11px] font-black uppercase tracking-[.14em] text-[var(--event-primary)]">{cardStateLabel(item.teamCard.state)}</p>
+                    <p className="text-[11px] font-black uppercase tracking-[.14em] text-[var(--event-primary)]">{effectiveCardStateLabel(item.teamCard, now)}</p>
                     <div className="mt-[clamp(.4rem,1.2svh,.75rem)] flex min-h-11 items-center justify-between gap-2"><h3 className="min-w-0 text-[clamp(1.3rem,5.5vw,1.65rem)] font-black leading-tight">{item.definition.name}</h3>{front && <IconButton aria-label={`Dettagli carta ${item.definition.name}`} onClick={() => setDetail(item)} sx={{ minWidth: 44, minHeight: 44 }}><Info /></IconButton>}</div>
                     <p className="mt-[clamp(.4rem,1.1svh,.7rem)] text-sm leading-relaxed text-white/70">{item.definition.description}</p>
                     <span className="mt-[clamp(.55rem,1.4svh,.9rem)] w-fit rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold">Durata · {durationLabel(item.definition.durationType, item.definition.durationValue)}</span>
-                    {front && <div className="mt-auto flex justify-end pt-2"><button type="button" disabled={!demo || item.teamCard.state !== 'available'} onClick={() => onPlayDemoCard(item.teamCard.id)} className="min-h-12 w-fit rounded-lg bg-[var(--event-primary)] px-6 font-black uppercase text-black disabled:bg-white/10 disabled:text-white/45">Utilizza</button></div>}
+                    {front && item.teamCard.state === 'active' && item.teamCard.expiresAt && <p className="mt-3 text-2xl font-black text-[var(--event-primary)]">{remainingTime(item.teamCard.expiresAt, now)}</p>}
+                    {front && <div className="mt-auto flex flex-col items-end gap-2 pt-2">{blockedReason && <p className="text-right text-xs font-bold text-amber-300">{blockedReason}</p>}{cardFeedback && <p className="text-right text-xs font-bold text-white/65">{cardFeedback}</p>}<button type="button" disabled={Boolean(blockedReason) || pendingCardId === item.teamCard.id || item.teamCard.state !== 'available'} onClick={async () => { setPendingCardId(item.teamCard.id); setCardFeedback(''); try { setCardFeedback(await onPlayDemoCard(item.teamCard.id)) } catch (cause) { setCardFeedback(cause instanceof Error ? cause.message : 'Richiesta non riuscita.') } finally { setPendingCardId('') } }} className="min-h-12 w-fit rounded-lg bg-[var(--event-primary)] px-6 font-black uppercase text-black disabled:bg-white/10 disabled:text-white/45">Utilizza</button></div>}
                   </div>
                 </motion.article>
               </div>
@@ -191,12 +236,12 @@ export function TeamCardDeck({ open, onClose, cards, definitions, demo, onPlayDe
 
 function TeamStandingsTab({ tournament, team }: { tournament: Tournament; team: Team }) {
   const rows = groupStandings(tournament, team.groupId)
-  return <section><p className="text-xs font-black uppercase tracking-[.18em] text-[var(--event-primary)]">Il tuo girone</p><h1 className="mt-1 text-3xl font-black">Classifica</h1><p className="mt-1 text-sm text-white/55">{tournament.groups.find(group => group.id === team.groupId)?.name ?? 'Girone da definire'}</p><div className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-[#171717]"><div className="grid grid-cols-[32px_minmax(0,1fr)_repeat(4,32px)] gap-1 bg-white/[.07] px-3 py-3 text-center text-[11px] font-black uppercase text-white/45"><span>Pos.</span><span className="text-left">Squadra</span><span>PG</span><span>V</span><span>S</span><span>Pts</span></div>{rows.map((row, index) => <div data-current-team={row.team.id === team.id || undefined} key={row.team.id} className={`grid min-h-14 grid-cols-[32px_minmax(0,1fr)_repeat(4,32px)] items-center gap-1 border-t border-white/10 px-3 text-center text-sm ${row.team.id === team.id ? 'bg-[var(--event-primary)]/15 font-black text-[var(--event-primary)]' : ''}`}><span>{index + 1}</span><span className="truncate text-left">{row.team.name}</span><span>{row.standing?.played ?? '—'}</span><span>{row.standing?.won ?? '—'}</span><span>{row.standing?.lost ?? '—'}</span><span>{row.standing?.points ?? '—'}</span></div>)}</div></section>
+  return <section><p className="text-xs font-black uppercase tracking-[.18em] text-[var(--event-primary)]">Il tuo girone</p><h1 className="mt-1 text-3xl font-black">Classifica</h1><p className="mt-1 text-sm text-white/55">{tournament.groups.find(group => group.id === team.groupId)?.name ?? 'Girone da definire'}</p><div className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-[#171717]"><div className="grid grid-cols-[32px_minmax(0,1fr)_repeat(3,32px)] gap-1 bg-white/[.07] px-3 py-3 text-center text-[11px] font-black uppercase text-white/45"><span>Pos.</span><span className="text-left">Squadra</span><span>G</span><span>V</span><span>P</span></div>{rows.map((row, index) => <div data-current-team={row.team.id === team.id || undefined} key={row.team.id} className={`grid min-h-14 grid-cols-[32px_minmax(0,1fr)_repeat(3,32px)] items-center gap-1 border-t border-white/10 px-3 text-center text-sm ${row.team.id === team.id ? 'bg-[var(--event-primary)]/15 font-black text-[var(--event-primary)]' : ''}`}><span>{index + 1}</span><span className="truncate text-left">{row.team.name}</span><span>{row.standing.played}</span><span>{row.standing.won}</span><span>{row.standing.lost}</span></div>)}</div></section>
 }
 
 function TeamResultsTab({ tournament, team, matches, selectedMatchId, onSelectMatch }: { tournament: Tournament; team: Team; matches: Match[]; selectedMatchId: string; onSelectMatch: (id: string) => void }) {
-  const completed = matches.filter(match => match.status === 'completed')
-  const future = matches.filter(match => match.status !== 'completed')
+  const completed = matches.filter(match => match.status === 'completed' && match.resultConfirmedAt)
+  const future = matches.filter(match => match.status !== 'completed' || !match.resultConfirmedAt)
   const next = future.find(match => match.id === selectedMatchId) ?? future[0]
   const programmed = future.filter(match => match.id !== next?.id)
   return <section><p className="text-xs font-black uppercase tracking-[.18em] text-[var(--event-primary)]">Risultati</p><h1 className="mt-1 text-3xl font-black">Partite della squadra</h1><div className="mt-5 grid gap-6">{next && <MatchGroup title="Prossimo"><TeamMatchListItem tournament={tournament} team={team} match={next} featured onSelect={onSelectMatch} /></MatchGroup>}{programmed.length > 0 && <MatchGroup title="In programma">{programmed.map(match => <TeamMatchListItem key={match.id} tournament={tournament} team={team} match={match} onSelect={onSelectMatch} />)}</MatchGroup>}{completed.length > 0 && <MatchGroup title="Conclusi">{completed.map(match => <TeamMatchListItem key={match.id} tournament={tournament} team={team} match={match} completed onSelect={onSelectMatch} />)}</MatchGroup>}</div></section>
@@ -226,11 +271,12 @@ function ResultsLineupDetails({ match, team, opponent }: { match: Match; team: T
 
 export function getRequiredLineupSet(match: Match): 1 | 2 | null { if (!match.set1StartedAt && ['scheduled', 'ready', 'lineup'].includes(match.status)) return 1; if (match.set1EndedAt && !match.set2StartedAt && ['set_break', 'lineup_set_2'].includes(match.status)) return 2; return null }
 export function getOwnMatchCards(cards: TeamCard[], teamId: string, matchId: string) { return cards.filter(card => card.teamId === teamId && card.matchId === matchId) }
-function groupStandings(tournament: Tournament, groupId: string) { return tournament.teams.filter(team => team.groupId === groupId).map(team => ({ team, standing: tournament.standings.find(item => item.teamId === team.id) })).sort((a, b) => (b.standing?.points ?? -1) - (a.standing?.points ?? -1)) }
-function matchSetLabel(match: Match) { if (match.status === 'set_break' || match.status === 'lineup_set_2' || match.status === 'live_set_2') return 'Set 2'; if (match.status === 'completed') return 'Terminata'; return 'Set 1' }
-function matchStatusLabel(status: Match['status']) { const labels: Record<Match['status'], string> = { scheduled: 'Programmata', lineup: 'Formazioni', ready: 'Pronta', live: 'In corso', live_set_1: 'Set 1 in corso', set_break: 'Pausa tra i set', lineup_set_2: 'Formazioni Set 2', kaos_pending: 'Attesa Kaos', kaos_reveal: 'Rivelazione Kaos', kaos_event: 'Evento Kaos', live_set_2: 'Set 2 in corso', completed: 'Terminata' }; return labels[status] }
+function matchSetLabel(match: Match) { if (match.status === 'super_tiebreak') return 'Super Tie-Break'; if (match.status === 'set_break' || match.status === 'lineup_set_2' || match.status === 'live_set_2') return 'Set 2'; if (match.status === 'completed') return 'Terminata'; return 'Set 1' }
+function matchStatusLabel(status: Match['status']) { const labels: Record<Match['status'], string> = { scheduled: 'Programmata', lineup: 'Formazioni', ready: 'Pronta', live: 'In corso', live_set_1: 'Set 1 in corso', set_break: 'Pausa tra i set', lineup_set_2: 'Formazioni Set 2', kaos_pending: 'Attesa Kaos', kaos_reveal: 'Rivelazione Kaos', kaos_event: 'Evento Kaos', live_set_2: 'Set 2 in corso', super_tiebreak: 'Super Tie-Break', completed: 'Terminata' }; return labels[status] }
 function matchOptionLabel(tournament: Tournament, team: Team, match: Match) { const opponent = tournament.teams.find(item => item.id === (match.teamAId === team.id ? match.teamBId : match.teamAId)); const round = tournament.rounds?.find(item => item.id === match.roundId); const court = tournament.courts.find(item => item.id === match.courtId); return `${round?.name ?? 'Turno'} · vs ${opponent?.name ?? 'Avversario'} · ${court?.name ?? 'Campo da assegnare'} · ${matchStatusLabel(match.status)}` }
 export function isSuperTieBreakRequired(match: Match) { return match.score.currentSet >= 3 }
-function cardStateLabel(state: TeamCard['state']) { return ({ available: 'Disponibile', pending: 'In attesa', active: 'Attiva', used: 'Usata', cancelled: 'Annullata' } as const)[state] }
+function cardStateLabel(state: TeamCard['state']) { return ({ available: 'Disponibile', pending: 'In attesa', active: 'Attiva', used: 'Usata', cancelled: 'Annullata', expired: 'Scaduta' } as const)[state] }
+function effectiveCardStateLabel(card: TeamCard, now: number) { return card.state === 'active' && card.expiresAt && new Date(card.expiresAt).getTime() <= now ? 'Scaduta' : cardStateLabel(card.state) }
 function durationLabel(type: CardDefinition['durationType'], value: number) { const labels = { timed: 'tempo', games: 'game', instant: 'istantanea', until_condition: 'fino alla condizione indicata', point: 'punto', game: 'game', set: 'set', match: 'partita' }; return value > 0 && (type === 'timed' || type === 'games') ? `${value} ${labels[type]}` : labels[type] }
+export function remainingTime(expiresAt: string, now = Date.now()) { const seconds=Math.max(0,Math.ceil((new Date(expiresAt).getTime()-now)/1000)); return `${Math.floor(seconds/60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}` }
 function genderLabel(gender: Team['players'][number]['gender']) { return ({ woman: 'Donna', man: 'Uomo', non_binary: 'Non binario', unspecified: 'Non specificato' } as const)[gender] }

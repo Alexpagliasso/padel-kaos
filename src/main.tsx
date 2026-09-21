@@ -7,15 +7,19 @@ import './index.css'
 import App from './App.tsx'
 import { queryClient } from './app/queryClient.ts'
 import { AuthProvider } from './features/auth/AuthProvider.tsx'
+import { deploymentConfigError } from './app/deploymentConfig.ts'
+import { DeploymentConfigurationError } from './app/DeploymentConfigurationError.tsx'
+
+const configurationError = deploymentConfigError(import.meta.env)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
+    {configurationError ? <DeploymentConfigurationError message={configurationError} /> : <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
           <TournamentThemeProvider><App /></TournamentThemeProvider>
         </BrowserRouter>
       </AuthProvider>
-    </QueryClientProvider>
+    </QueryClientProvider>}
   </StrictMode>,
 )

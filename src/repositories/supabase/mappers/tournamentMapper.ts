@@ -16,6 +16,7 @@ import type {
   Team,
   TeamCard,
   Tournament,
+  TournamentEvent,
   TournamentPhase,
 } from '../../../shared/types/domain'
 import { splitLegacyPlayerName } from '../../../shared/lib/playerNames'
@@ -36,6 +37,17 @@ export type SupabaseTournamentRow = {
   created_at?: string | null
   updated_at?: string | null
   set_control_mode?: string | null
+  main_display_mode?: string | null
+  main_display_page?: number | null
+  main_display_interval_seconds?: number | null
+  referee_can_manage_score?: boolean | null
+  referee_can_validate_cards?: boolean | null
+  referee_can_report_event_winner?: boolean | null
+  cards_enabled?: boolean | null
+  display_card_notifications_enabled?: boolean | null
+  dice_enabled?: boolean | null
+  special_events_enabled?: boolean | null
+  default_set_duration_minutes?: number | null
 }
 
 export type SupabaseGroupRow = {
@@ -81,7 +93,18 @@ export type SupabaseRoundRow = {
   dice_rule_id: string | null
   dice_started_at: string | null
   dice_ends_at: string | null
+  dice_rolled_at?: string | null
   opened_at?: string | null
+  set_duration_minutes?: number | null
+  completion_total_matches?: number | null
+  completion_completed_matches?: number | null
+  completion_ready?: boolean | null
+  completion_blockers?: Array<{ match_id?: string; court_id?: string; reason?: string }> | null
+  cards_per_team?: number | null
+  card_total_teams?: number | null
+  card_ready_teams?: number | null
+  card_readiness_ready?: boolean | null
+  card_readiness_blockers?: Array<{ match_id?: string; court_id?: string; team_id?: string; expected_cards?: number; assigned_cards?: number }> | null
 }
 
 export type SupabaseMatchRow = {
@@ -101,6 +124,14 @@ export type SupabaseMatchRow = {
   set_1_ended_at?: string | null
   set_2_started_at?: string | null
   set_2_ended_at?: string | null
+  super_tiebreak_team_a?: number | null
+  super_tiebreak_team_b?: number | null
+  completed_at?: string | null
+  result_confirmed_at?: string | null
+  result_confirmed_by?: string | null
+  active_set_duration_minutes?: number | null
+  set_1_result_submitted_at?: string | null
+  set_2_result_submitted_at?: string | null
 }
 
 export type SupabaseMatchLineupRow = {
@@ -153,6 +184,7 @@ export type SupabaseDiceRuleRow = {
   effect_type: string
   duration_seconds: number
   enabled: boolean | null
+  product_code?: string | null
 }
 
 export type SupabaseGlobalEventRow = {
@@ -177,6 +209,19 @@ export type SupabaseMatchEventRow = {
   created_at: string
 }
 
+export type SupabaseTournamentEventRow = {
+  id: string
+  round_id: string | null
+  type: string
+  payload: Record<string, unknown> | null
+  actor_user_id: string | null
+  created_at: string
+}
+export type SupabaseEventWinnerReportRow = {
+  id: string; global_event_id: string; match_id: string; player_id: string; team_id: string
+  status: 'pending' | 'accepted' | 'rejected'; created_at: string
+}
+
 export type SupabaseTournamentStateDto = {
   tournament: SupabaseTournamentRow
   groups?: SupabaseGroupRow[] | null
@@ -190,7 +235,9 @@ export type SupabaseTournamentStateDto = {
   teamCards?: SupabaseMatchCardRow[] | null
   diceRules?: SupabaseDiceRuleRow[] | null
   matchEvents?: SupabaseMatchEventRow[] | null
+  tournamentEvents?: SupabaseTournamentEventRow[] | null
   globalEvents?: SupabaseGlobalEventRow[] | null
+  eventWinnerReports?: SupabaseEventWinnerReportRow[] | null
 }
 
 export function createEmptyTournamentDomain(message = 'No tournament configured'): Tournament {
@@ -249,6 +296,14 @@ export function mapSupabaseTournamentState(dto: SupabaseTournamentStateDto): Tou
     set1EndedAt: match.set_1_ended_at ?? undefined,
     set2StartedAt: match.set_2_started_at ?? undefined,
     set2EndedAt: match.set_2_ended_at ?? undefined,
+    superTiebreakA: match.super_tiebreak_team_a ?? undefined,
+    superTiebreakB: match.super_tiebreak_team_b ?? undefined,
+    completedAt: match.completed_at ?? undefined,
+    resultConfirmedAt: match.result_confirmed_at ?? undefined,
+    resultConfirmedBy: match.result_confirmed_by ?? undefined,
+    activeSetDurationMinutes: match.active_set_duration_minutes ?? undefined,
+    set1ResultSubmittedAt: match.set_1_result_submitted_at ?? undefined,
+    set2ResultSubmittedAt: match.set_2_result_submitted_at ?? undefined,
   }))
 
   return {
@@ -267,9 +322,20 @@ export function mapSupabaseTournamentState(dto: SupabaseTournamentStateDto): Tou
     createdAt: dto.tournament.created_at ?? null,
     updatedAt: dto.tournament.updated_at ?? null,
     setControlMode: dto.tournament.set_control_mode === 'referee' ? 'referee' : 'centralized',
+    mainDisplayMode: dto.tournament.main_display_mode === 'fixed' ? 'fixed' : 'auto',
+    mainDisplayPage: Math.max(0, dto.tournament.main_display_page ?? 0),
+    mainDisplayIntervalSeconds: ([4,5,8,10].includes(dto.tournament.main_display_interval_seconds ?? 5) ? dto.tournament.main_display_interval_seconds ?? 5 : 5) as 4 | 5 | 8 | 10,
+    refereeCanManageScore: dto.tournament.referee_can_manage_score ?? true,
+    refereeCanValidateCards: dto.tournament.referee_can_validate_cards ?? true,
+    refereeCanReportEventWinner: dto.tournament.referee_can_report_event_winner ?? true,
+    cardsEnabled: dto.tournament.cards_enabled ?? true,
+    displayCardNotificationsEnabled: dto.tournament.display_card_notifications_enabled ?? true,
+    diceEnabled: dto.tournament.dice_enabled ?? true,
+    specialEventsEnabled: dto.tournament.special_events_enabled ?? true,
+    defaultSetDurationMinutes: dto.tournament.default_set_duration_minutes ?? 15,
     groups: (dto.groups ?? []).map((group) => ({ id: group.id, name: group.name, tournamentId: group.tournament_id ?? dto.tournament.id, sortOrder: group.sort_order, assignedCourtId: group.assigned_court_id ?? null })),
     courts: (dto.courts ?? []).map((court) => ({ id: court.id, name: court.name })),
-    rounds: (dto.rounds ?? []).map(mapRound),
+    rounds: (dto.rounds ?? []).map(round => ({ ...mapRound(round), effectiveSetDurationMinutes: round.set_duration_minutes ?? dto.tournament.default_set_duration_minutes ?? 15 })),
     teams,
     matches,
     cards: (dto.cards ?? []).map(mapCardDefinition),
@@ -277,7 +343,9 @@ export function mapSupabaseTournamentState(dto: SupabaseTournamentStateDto): Tou
     diceRules: (dto.diceRules ?? []).map(mapDiceRule),
     kaosEvents: [],
     matchEvents: (dto.matchEvents ?? []).map(mapMatchEvent),
+    tournamentEvents: (dto.tournamentEvents ?? []).map(mapTournamentEvent),
     globalEvents: (dto.globalEvents ?? []).map(mapGlobalEvent),
+    eventWinnerReports: (dto.eventWinnerReports ?? []).map(report => ({ id: report.id, globalEventId: report.global_event_id, matchId: report.match_id, playerId: report.player_id, teamId: report.team_id, status: report.status, createdAt: report.created_at })),
     standings: teams.map((team) => ({ teamId: team.id, played: 0, won: 0, lost: 0, points: 0 })),
   }
 }
@@ -337,7 +405,19 @@ function mapRound(round: SupabaseRoundRow): Round {
     diceRuleId: round.dice_rule_id ?? undefined,
     diceStartedAt: round.dice_started_at ?? undefined,
     diceEndsAt: round.dice_ends_at ?? undefined,
+    diceRolledAt: round.dice_rolled_at ?? undefined,
     openedAt: round.opened_at ?? undefined,
+    setDurationMinutes: round.set_duration_minutes ?? undefined,
+    effectiveSetDurationMinutes: round.set_duration_minutes ?? undefined,
+    completionTotalMatches: round.completion_total_matches ?? 0,
+    completionCompletedMatches: round.completion_completed_matches ?? 0,
+    completionReady: round.completion_ready ?? false,
+    completionBlockers: (round.completion_blockers ?? []).map(item => ({ matchId: item.match_id ?? '', courtId: item.court_id ?? '', reason: item.reason ?? 'Partita da completare' })),
+    cardsPerTeam: round.cards_per_team ?? 3,
+    cardTotalTeams: round.card_total_teams ?? 0,
+    cardReadyTeams: round.card_ready_teams ?? 0,
+    cardReadinessReady: round.card_readiness_ready ?? false,
+    cardReadinessBlockers: (round.card_readiness_blockers ?? []).map(item => ({ matchId: item.match_id ?? '', courtId: item.court_id ?? '', teamId: item.team_id ?? '', expectedCards: item.expected_cards ?? 3, assignedCards: item.assigned_cards ?? 0 })),
   }
 }
 
@@ -352,7 +432,7 @@ function mapCardDefinition(card: SupabaseCardDefinitionRow): CardDefinition {
     target: mapCardTarget(card.target_type),
     activationTiming: 'anytime',
     durationType: mapCardDurationType(card.duration_type),
-    durationValue: card.duration_value ?? 1,
+    durationValue: card.duration_type === 'timed' ? Math.max(1, (card.duration_value ?? 60) / 60) : card.duration_value ?? 1,
     effectType: card.effect_type,
     targetType: mapCardTargetType(card.target_type),
     canBeStolen: card.can_be_stolen ?? false,
@@ -390,6 +470,8 @@ function mapDiceRule(rule: SupabaseDiceRuleRow): DiceRule {
     description: rule.description,
     effectType: rule.effect_type,
     durationGames: Math.max(1, Math.ceil(rule.duration_seconds / 300)),
+    durationSeconds: rule.duration_seconds,
+    productCode: rule.product_code ?? undefined,
     enabled: rule.enabled ?? true,
   }
 }
@@ -405,6 +487,9 @@ function mapMatchEvent(event: SupabaseMatchEventRow): MatchEvent {
   }
 }
 
+function mapTournamentEvent(event: SupabaseTournamentEventRow): TournamentEvent {
+  return { id: event.id, roundId: event.round_id ?? undefined, type: mapMatchEventType(event.type), payload: event.payload ?? {}, actorUserId: event.actor_user_id ?? '', createdAt: event.created_at }
+}
 function mapGlobalEvent(event: SupabaseGlobalEventRow): GlobalEvent {
   return {
     id: event.id,
@@ -478,7 +563,7 @@ function mapCardTargetType(targetType: string): CardDefinition['targetType'] {
 }
 
 function mapCardState(status: string): CardState {
-  if (status === 'available' || status === 'pending' || status === 'active' || status === 'used' || status === 'cancelled') return status
+  if (status === 'available' || status === 'pending' || status === 'active' || status === 'used' || status === 'cancelled' || status === 'expired') return status
   return 'used'
 }
 
@@ -499,7 +584,10 @@ function mapMatchEventType(type: string): MatchEventType {
     type === 'CARD_ACTIVATED' ||
     type === 'CARD_EXPIRED' ||
     type === 'DICE_ROLLED' ||
-    type === 'SCORE_CORRECTED'
+    type === 'SCORE_CORRECTED' ||
+    type === 'ROUND_STARTED' || type === 'SET_1_STARTED' || type === 'SET_2_STARTED' ||
+    type === 'TIME_EXPIRED' || type === 'SET_RESULT_SUBMITTED' || type === 'SUPER_TIEBREAK_REQUIRED' ||
+    type === 'CARD_REJECTED' || type === 'ROUND_COMPLETED'
   ) {
     return type
   }

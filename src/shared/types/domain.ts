@@ -17,13 +17,14 @@ export type MatchStatus =
   | 'kaos_reveal'
   | 'kaos_event'
   | 'live_set_2'
+  | 'super_tiebreak'
   | 'completed'
 
 export type TournamentPhase = 'GROUP_STAGE' | 'KNOCKOUT'
 
 export type RoundStage = 'group' | 'quarter_final' | 'semi_final' | 'final'
 
-export type CardState = 'available' | 'pending' | 'active' | 'used' | 'cancelled'
+export type CardState = 'available' | 'pending' | 'active' | 'used' | 'cancelled' | 'expired'
 
 export type MatchEventType =
   | 'MATCH_STARTED'
@@ -40,6 +41,14 @@ export type MatchEventType =
   | 'SPECIAL_EVENT'
   | 'MATCH_COMPLETED'
   | 'SCORE_CORRECTED'
+  | 'ROUND_STARTED'
+  | 'SET_1_STARTED'
+  | 'SET_2_STARTED'
+  | 'TIME_EXPIRED'
+  | 'SET_RESULT_SUBMITTED'
+  | 'SUPER_TIEBREAK_REQUIRED'
+  | 'CARD_REJECTED'
+  | 'ROUND_COMPLETED'
 
 export type CardDurationType = 'timed' | 'games' | 'instant' | 'until_condition' | 'point' | 'game' | 'set' | 'match'
 
@@ -139,6 +148,8 @@ export type DiceRule = {
   description: string
   effectType: string
   durationGames?: number
+  durationSeconds?: number
+  productCode?: string
   enabled: boolean
 }
 
@@ -177,6 +188,23 @@ export type Match = {
   set1EndedAt?: string
   set2StartedAt?: string
   set2EndedAt?: string
+  superTiebreakA?: number
+  superTiebreakB?: number
+  completedAt?: string
+  resultConfirmedAt?: string
+  resultConfirmedBy?: string
+  activeSetDurationMinutes?: number
+  set1ResultSubmittedAt?: string
+  set2ResultSubmittedAt?: string
+}
+
+export type TournamentEvent = {
+  id: string
+  roundId?: string
+  type: MatchEventType
+  payload: Record<string, unknown>
+  actorUserId: string
+  createdAt: string
 }
 
 export type Round = {
@@ -190,7 +218,19 @@ export type Round = {
   diceRuleId?: string
   diceStartedAt?: string
   diceEndsAt?: string
+  diceRolledAt?: string
   openedAt?: string
+  setDurationMinutes?: number
+  effectiveSetDurationMinutes?: number
+  completionTotalMatches?: number
+  completionCompletedMatches?: number
+  completionReady?: boolean
+  completionBlockers?: Array<{ matchId: string; courtId: string; reason: string }>
+  cardsPerTeam?: number
+  cardTotalTeams?: number
+  cardReadyTeams?: number
+  cardReadinessReady?: boolean
+  cardReadinessBlockers?: Array<{ matchId: string; courtId: string; teamId: string; expectedCards: number; assignedCards: number }>
 }
 
 export type Court = {
@@ -219,6 +259,8 @@ export type GlobalEvent = {
   winnerTeamId?: string
 }
 
+export type EventWinnerReport = { id:string; globalEventId:string; matchId:string; playerId:string; teamId:string; status:'pending'|'accepted'|'rejected'; createdAt:string }
+
 export type Tournament = {
   id: string
   name: string
@@ -236,6 +278,17 @@ export type Tournament = {
   phase?: TournamentPhase
   status?: 'draft' | 'configured' | 'live' | 'completed' | 'archived'
   setControlMode?: 'centralized' | 'referee'
+  mainDisplayMode?: 'auto' | 'fixed'
+  mainDisplayPage?: number
+  mainDisplayIntervalSeconds?: 4 | 5 | 8 | 10
+  refereeCanManageScore?: boolean
+  refereeCanValidateCards?: boolean
+  refereeCanReportEventWinner?: boolean
+  cardsEnabled?: boolean
+  displayCardNotificationsEnabled?: boolean
+  diceEnabled?: boolean
+  specialEventsEnabled?: boolean
+  defaultSetDurationMinutes?: number
   groups: Group[]
   courts: Court[]
   rounds?: Round[]
@@ -246,6 +299,8 @@ export type Tournament = {
   diceRules: DiceRule[]
   kaosEvents: MatchKaosEvent[]
   matchEvents: MatchEvent[]
+  tournamentEvents?: TournamentEvent[]
   globalEvents: GlobalEvent[]
+  eventWinnerReports?: EventWinnerReport[]
   standings: Standing[]
 }

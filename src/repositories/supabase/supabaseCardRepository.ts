@@ -119,7 +119,7 @@ function toCardRow(input: CardDefinitionInput) {
     effect_type: input.effectType.trim(),
     target_type: input.targetType,
     duration_type: input.durationType,
-    duration_value: input.durationValue,
+    duration_value: input.durationType === 'timed' && input.durationValue != null ? input.durationValue * 60 : input.durationValue,
     can_be_stolen: input.canBeStolen,
     enabled: input.enabled,
   }
@@ -139,7 +139,7 @@ export function mapCardDefinitionRow(row: SupabaseCardDefinitionAdminRow): CardD
     target: targetType === 'round' || targetType === 'global' ? 'global' : targetType === 'active_card' ? 'opponent' : targetType,
     activationTiming: 'anytime',
     durationType: row.duration_type === 'timed' || row.duration_type === 'games' || row.duration_type === 'until_condition' ? row.duration_type : 'instant',
-    durationValue: row.duration_value ?? 1,
+    durationValue: row.duration_type === 'timed' ? Math.max(1, (row.duration_value ?? 60) / 60) : row.duration_value ?? 1,
     effectType: row.effect_type,
     targetType,
     canBeStolen: row.can_be_stolen,
