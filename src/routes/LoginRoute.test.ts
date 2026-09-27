@@ -9,7 +9,7 @@ describe('LoginRoute helpers', () => {
   })
 
   it('shows visible loading feedback while submitting', () => {
-    expect(getLoginButtonLabel(true)).toBe('Accesso in corso...')
-    expect(getLoginButtonLabel(false)).toBe('Sign in')
+    expect(getLoginButtonLabel(true)).toBe('Accesso in corso…')
+    expect(getLoginButtonLabel(false)).toBe('Accedi')
   })
 })

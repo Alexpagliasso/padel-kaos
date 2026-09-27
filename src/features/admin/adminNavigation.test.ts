@@ -9,6 +9,8 @@ describe('admin navigation', () => {
       '/admin/teams',
       '/admin/groups',
       '/admin/calendar',
+      '/admin/standings',
+      '/admin/results',
       '/admin/control-room',
       '/admin/access',
       '/admin/appearance',

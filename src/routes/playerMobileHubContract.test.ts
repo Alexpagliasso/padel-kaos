@@ -14,7 +14,8 @@ describe('Team mobile match hub contract', () => {
 
   it('opens Cards as a dedicated action and exposes readable long details without technical fields', () => {
     expect(source).toContain('onOpenCards')
-    expect(source).toContain('grid-cols-4')
+    expect(source).toContain('grid-cols-5')
+    expect(source).toContain("label: 'Formazione'")
     expect(source).toContain('Seleziona carta')
     expect(source).toContain('Torna alla mano')
     expect(source).toContain('data-card-experience="fullscreen"')
@@ -27,7 +28,7 @@ describe('Team mobile match hub contract', () => {
 
   it('presents real standings and only Team-scoped upcoming matches', () => {
     expect(source).toContain('groupStandings(tournament, team.groupId)')
-    expect(source).toContain("matches.filter(match => match.status !== 'completed')")
+    expect(source).toContain("matches.filter(match => match.status !== 'completed' || !match.resultConfirmedAt)")
     expect(source).toContain('Pos.')
     expect(source).toContain('Partite della squadra')
   })

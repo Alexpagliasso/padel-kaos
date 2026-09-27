@@ -52,6 +52,7 @@ export function useLiveOrchestrationRepository(tournamentId: string, subscribe =
     correctMatchResult: (matchId: string, setNumber: 1 | 2 | 3, scoreA: number, scoreB: number) => call('admin_correct_match_result', { p_match_id: matchId, p_set_number: setNumber, p_score_a: scoreA, p_score_b: scoreB }),
     confirmMatchResult: (matchId: string) => call('confirm_match_final_result', { p_match_id: matchId }),
     setDefaultSetDuration: (minutes: number) => call('set_tournament_default_set_duration', { p_tournament_id: tournamentId, p_minutes: minutes }),
+    setDefaultTimedCardDuration: (minutes:number) => call('set_tournament_default_timed_card_duration',{p_tournament_id:tournamentId,p_minutes:minutes}),
     setRoundSetDuration: (roundId: string, minutes?: number) => call('set_round_set_duration', { p_round_id: roundId, p_minutes: minutes ?? null }),
     adminControlMatch: (matchId: string, action: SetAction) => call('admin_control_match_set', { p_match_id: matchId, p_action: action }),
     expireSet: (matchId: string) => call('expire_timed_match_set', { p_match_id: matchId }),

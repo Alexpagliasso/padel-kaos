@@ -88,7 +88,8 @@ function presentationForTournamentEvent(tournament:Tournament,event:TournamentEv
 }
 
 function presentationForGlobalEvent(tournament:Tournament,event:GlobalEvent,audience:LiveAudience):LivePresentation[]{
-  if(event.status==='active'&&event.startedAt)return[{id:`global:start:${event.id}:${event.startedAt}`,category:'SHOW_EVENT',priority:80,title:'EVENTO SPECIALE',detail:[event.title,event.description,event.prize?`PREMIO · ${event.prize}`:''].filter(Boolean).join(' · '),createdAt:event.startedAt,expiresAfterMs:11000}]
+  // Activation has its own synchronized fullscreen reveal; keep the queue for winner announcements.
+  if(event.status==='active'&&event.startedAt)return[]
   if(event.status==='completed'&&event.completedAt&&event.winnerPlayerId){
     const team=tournament.teams.find(item=>item.id===event.winnerTeamId);const player=team?.players.find(item=>item.id===event.winnerPlayerId)
     return[{id:`global:winner:${event.id}:${event.completedAt}`,category:'SHOW_EVENT',priority:95,title:'VINCITORE EVENTO',detail:[player?.name,team?.name,event.prize].filter(Boolean).join(' · '),createdAt:event.completedAt,expiresAfterMs:12000}]

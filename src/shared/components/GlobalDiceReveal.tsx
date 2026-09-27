@@ -1,31 +1,18 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useQueryClient } from '@tanstack/react-query'
 import type { Tournament } from '../types/domain'
 import { DICE_REVEAL_MS, diceCubeRotation, diceFaces, diceShowPhase } from '../../domain/live/diceShow'
 import { DICE_CONTINUE_MS, DICE_DISMISSED_EVENT, dismissDiceReveal, openDiceReveal, type DiceAudience } from '../../domain/live/dicePresentation'
-import { dataProvider } from '../../repositories'
-import { requireSupabase } from '../../services/supabase/client'
-import { supabaseTournamentKeys } from '../../repositories/supabase/queryKeys'
 import './globalDiceReveal.css'
 
 export function GlobalDiceReveal({ tournament, audience }: { tournament: Tournament; audience: DiceAudience }) {
-  const queryClient = useQueryClient()
   const [now, setNow] = useState(() => Date.now())
+  const rollOccurrences=tournament.rounds?.map(round=>`${round.id}:${round.diceRolledAt??''}`).join('|')??''
+  useEffect(()=>{const timer=window.setTimeout(()=>setNow(Date.now()),0);return()=>window.clearTimeout(timer)},[rollOccurrences])
   const reveal = openDiceReveal(tournament, audience, now)
   const [reducedMotion, setReducedMotion] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true,
   )
-
-  useEffect(() => {
-    if (dataProvider !== 'supabase' || !tournament.id || tournament.id === 'demo-tournament' || tournament.id === 'empty-tournament') return
-    const client = requireSupabase()
-    const refresh = () => { void queryClient.invalidateQueries({ queryKey: supabaseTournamentKeys.detail(tournament.id) }) }
-    const channel = client.channel(`dice-show:${tournament.id}:${crypto.randomUUID()}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rounds', filter: `tournament_id=eq.${tournament.id}` }, refresh)
-      .subscribe()
-    return () => { void client.removeChannel(channel) }
-  }, [queryClient, tournament.id])
 
   useEffect(() => {
     if (!reveal) return
@@ -52,7 +39,7 @@ export function GlobalDiceReveal({ tournament, audience }: { tournament: Tournam
   const showArtwork = reducedMotion || elapsed >= DICE_CONTINUE_MS
 
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label="Risultato dado globale" className={`dice-show dice-show--${phase.toLowerCase()}${reducedMotion ? ' dice-show--reduced' : ''}`}>
+    <div key={reveal.key} role="dialog" aria-modal="true" aria-label="Risultato dado globale" className={`dice-show dice-show--${phase.toLowerCase()}${reducedMotion ? ' dice-show--reduced' : ''}`}>
       <div className="dice-show__glow" aria-hidden="true" />
       <div className="dice-show__content">
         <p className="dice-show__eyebrow">PADEL KAOS · DADO GLOBALE</p>

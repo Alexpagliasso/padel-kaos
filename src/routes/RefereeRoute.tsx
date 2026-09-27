@@ -34,6 +34,7 @@ import type { CardDefinition, Match, Team, TeamCard, Tournament } from '../share
 import { formatCountdown, getDiceEffect, getPersistedSetResult } from '../domain/live/readiness'
 import { ActiveCardEffects, ActiveDiceIndicator, CardPlayNotification } from '../shared/components/LiveEffects'
 import { GlobalDiceReveal } from '../shared/components/GlobalDiceReveal'
+import { GlobalSpecialEventReveal } from '../shared/components/GlobalSpecialEventReveal'
 import { LiveEventPresenter } from '../shared/components/LiveEventPresenter'
 import { getSetTimer } from '../domain/live/setTimer'
 
@@ -57,7 +58,7 @@ export function RefereeRoute() {
     if (dataProvider !== 'supabase' || profile?.role !== 'referee') return
     let active = true
     let latestRequest = 0
-    setAssignedCourtsLoading(true)
+    const loadingTimer = window.setTimeout(() => setAssignedCourtsLoading(true), 0)
     const refresh = () => {
       const request = ++latestRequest
       void listMyRefereeCourtIds(profile.tournamentId, profile.id)
@@ -80,7 +81,7 @@ export function RefereeRoute() {
       .subscribe()
     const timer = window.setInterval(refresh, 10000)
     window.addEventListener('focus', refresh)
-    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); void client.removeChannel(channel) }
+    return () => { active = false; window.clearTimeout(loadingTimer); window.clearInterval(timer); window.removeEventListener('focus', refresh); void client.removeChannel(channel) }
   }, [profile?.id, profile?.role, profile?.tournamentId, queryClient])
 
   if (dataProvider === 'supabase' && profile?.role === 'referee') {
@@ -235,6 +236,7 @@ function RefereePreparationView({ tournament, courtId, courtIds = [], onCourtCha
   const [selectedId, setSelectedId] = useState('')
   const [lifecycleFeedback, setLifecycleFeedback] = useState('')
   const live = useLiveOrchestrationRepository(tournament.id, false)
+  const now=useSharedClock()
   if (isLoading) return <MobileRoleShell title="Area arbitro" action={headerAction}><main className="p-4"><p>Caricamento partite…</p></main></MobileRoleShell>
   if (error) return <MobileRoleShell title="Area arbitro" action={headerAction}><main className="p-4"><EmptyState title="Impossibile caricare la partita" /></main></MobileRoleShell>
   if (!courtId) return <MobileRoleShell title="Area arbitro" action={headerAction}><main className="p-4"><EmptyState title="NESSUN CAMPO ASSEGNATO" detail="La Regia non ti ha ancora assegnato un campo." /></main></MobileRoleShell>
@@ -244,6 +246,7 @@ function RefereePreparationView({ tournament, courtId, courtIds = [], onCourtCha
   const teamA = tournament.teams.find(item => item.id === match.teamAId)
   const teamB = tournament.teams.find(item => item.id === match.teamBId)
   const round = tournament.rounds?.find(item => item.id === match.roundId)
+  const lastGame=getSetTimer(match,now)?.expired===true
   const cardsReady = tournament.cardsEnabled===false||Boolean(round?.cardReadinessReady)
   const canStartSet2 = Boolean(round?.diceResult && match.set1EndedAt && getPersistedSetResult(tournament, match.id, 1))
   const control = async (action: SetAction, success: string) => {
@@ -252,7 +255,7 @@ function RefereePreparationView({ tournament, courtId, courtIds = [], onCourtCha
     catch (cause) { setLifecycleFeedback(cause instanceof Error ? cause.message : 'Operazione non riuscita.') }
   }
   return <MobileRoleShell title={court?.name ?? 'Campo'} status={match.status} action={headerAction}><CardPlayNotification key={match.id} tournament={tournament} audience="referee" matchIds={[match.id]}/><LiveEventPresenter key={match.id} tournament={tournament} audience="referee" matchIds={[match.id]} courtId={match.courtId} subscribe={false}/>
-    <GlobalDiceReveal tournament={tournament} audience="referee" />
+    <GlobalDiceReveal tournament={tournament} audience="referee" /><GlobalSpecialEventReveal tournament={tournament} audience="referee" />
     <main className="mx-auto max-w-3xl space-y-5 px-4 py-5">
       {courtIds.length > 1 && <label className="grid gap-1 text-sm font-bold text-white/70">CAMPO
         <select aria-label="Campo assegnato" className="rounded border border-white/20 bg-black px-3 py-3 text-white" value={courtId} onChange={event => onCourtChange?.(event.target.value)}>
@@ -273,9 +276,9 @@ function RefereePreparationView({ tournament, courtId, courtIds = [], onCourtCha
       {tournament.setControlMode === 'referee' ? <section className="grid gap-2 rounded border border-white/10 bg-[#171717] p-5">
         {!round?.openedAt ? <p className="font-bold text-amber-100">In attesa dell’apertura del turno da parte della Regia.</p> : <>
           {['scheduled', 'ready'].includes(match.status) && <><button className="rounded bg-[var(--event-primary)] px-4 py-4 font-black text-black disabled:opacity-40" disabled={live.isPending||!cardsReady} onClick={() => void control('start_set_1', 'Set 1 avviato.')}>AVVIA SET</button>{!cardsReady&&<p className="text-sm font-bold text-amber-200">In attesa dell’assegnazione carte da parte della Regia.</p>}</>}
-          {match.status === 'live_set_1' && <button className="rounded bg-white/10 px-4 py-4 font-black" disabled={live.isPending} onClick={() => window.confirm('TERMINARE IL SET IN ANTICIPO?') && void control('end_set_1', 'Set 1 terminato.')}>TERMINA SET IN ANTICIPO</button>}
+          {match.status === 'live_set_1' && <button className="rounded bg-white/10 px-4 py-4 font-black disabled:opacity-40" disabled={live.isPending||!lastGame} onClick={() => window.confirm('ULTIMO GAME CONCLUSO?') && void control('end_set_1', 'Set 1 terminato. Verifica il risultato e invialo alla Regia.')}>TERMINA SET</button>}
           {match.status === 'set_break' && <><button className="rounded bg-[var(--event-primary)] px-4 py-4 font-black text-black" disabled={live.isPending || !canStartSet2} onClick={() => void control('start_set_2', 'Set 2 avviato.')}>AVVIA SET</button>{!canStartSet2 && <p className="text-sm font-bold text-amber-200">In attesa del risultato del Set 1 e del dado globale della Regia.</p>}</>}
-          {match.status === 'live_set_2' && <button className="rounded bg-white/10 px-4 py-4 font-black" disabled={live.isPending} onClick={() => window.confirm('TERMINARE IL SET IN ANTICIPO?') && void control('end_set_2', 'Set 2 terminato.')}>TERMINA SET IN ANTICIPO</button>}
+          {match.status === 'live_set_2' && <button className="rounded bg-white/10 px-4 py-4 font-black disabled:opacity-40" disabled={live.isPending||!lastGame} onClick={() => window.confirm('ULTIMO GAME CONCLUSO?') && void control('end_set_2', 'Set 2 terminato. Verifica il risultato e invialo alla Regia.')}>TERMINA SET</button>}
         </>}
         {(lifecycleFeedback || live.error) && <p className="rounded bg-white/10 p-3 font-bold">{lifecycleFeedback || live.error}</p>}
       </section> : <p className="rounded border border-white/10 bg-[#171717] p-4 font-black text-amber-100">IN ATTESA DELLA REGIA</p>}
@@ -293,7 +296,6 @@ export function RefereeLiveMatch({ tournament, match, teamA, teamB }: { tourname
   const [selectedPlayerId,setSelectedPlayerId]=useState('')
   const [feedback,setFeedback]=useState('')
   const now=useSharedClock()
-  const expiryRequested=useRef('')
   const diceEffect=getDiceEffect(tournament,match,now)
   const activeSet=match.status==='live_set_1'||match.status==='live_set_2'
   const timer=getSetTimer(match,now)
@@ -303,7 +305,7 @@ export function RefereeLiveMatch({ tournament, match, teamA, teamB }: { tourname
   const refereeScoreEnabled=tournament.refereeCanManageScore!==false
   const active=tournament.teamCards.filter(card=>card.matchId===match.id&&card.state==='active'&&(!card.expiresAt||new Date(card.expiresAt).getTime()>now))
   const managed=pending.find(card=>card.id===managedCardId)
-  useEffect(()=>{ setGamesA(match.score.games.A); setGamesB(match.score.games.B) },[match.id,match.score.games.A,match.score.games.B])
+  useEffect(()=>{const timer=window.setTimeout(()=>{ setGamesA(match.score.games.A); setGamesB(match.score.games.B) },0);return()=>window.clearTimeout(timer)},[match.id,match.score.games.A,match.score.games.B])
   const run=async(action:()=>Promise<unknown>,success:string)=>{ setFeedback(''); try{ await action(); setFeedback(success) }catch(cause){ setFeedback(cause instanceof Error?cause.message:'Operazione non riuscita.') } }
   const definition=(card:TeamCard)=>tournament.cards.find(item=>item.id===card.cardId)
   const requestingTeam=managed?tournament.teams.find(team=>team.id===managed.teamId):undefined
@@ -315,21 +317,12 @@ export function RefereeLiveMatch({ tournament, match, teamA, teamB }: { tourname
     const team=tournament.teams.find(candidate=>candidate.id===item.teamId)
     return item.activePlayerIds.map(id=>team?.players.find(player=>player.id===id)).filter((player):player is NonNullable<typeof player>=>Boolean(player))
   })
-  useEffect(()=>{
-    const requestKey=timer?`${match.id}:${timer.setNumber}`:''
-    if(!timer?.expired||!activeSet||expiryRequested.current===requestKey)return
-    expiryRequested.current=requestKey
-    void live.expireSet(match.id).then(()=>setFeedback('TEMPO SCADUTO. Verifica e invia il risultato del set.')).catch(cause=>{
-      expiryRequested.current=''
-      setFeedback(cause instanceof Error?cause.message:'Operazione non riuscita.')
-    })
-  },[activeSet,live,match.id,timer?.expired,timer?.setNumber])
   return <section className="space-y-4">
     <SetTimer match={match} size="large" />
-    {timer?.expired&&<div className="rounded border border-red-400/60 bg-red-500/20 p-5 text-center text-2xl font-black text-red-100">TEMPO SCADUTO</div>}
-    {diceEffect.rule && match.status === 'live_set_2' && <div className="rounded border border-amber-400/35 bg-amber-400/10 p-4"><p className="text-xs font-black uppercase text-amber-200">Dado globale · {diceEffect.rule.value}</p><h2 className="mt-1 text-xl font-black">{diceEffect.rule.title}</h2><p className="text-sm text-white/65">{diceEffect.rule.description}</p>{diceEffect.active && <p className="mt-2 text-2xl font-black text-amber-200">{formatCountdown(diceEffect.remainingSeconds)}</p>}</div>}
+    {timer?.expired&&<div className="rounded border border-red-400/60 bg-red-500/20 p-5 text-center text-2xl font-black text-red-100">ULTIMO GAME</div>}
+    {diceEffect.active && diceEffect.rule && <div className="rounded border border-amber-400/35 bg-amber-400/10 p-4"><p className="text-xs font-black uppercase text-amber-200">Dado globale · {diceEffect.rule.value}</p><h2 className="mt-1 text-xl font-black">{diceEffect.rule.title}</h2><p className="text-sm text-white/65">{diceEffect.rule.description}</p><p className="mt-2 text-2xl font-black text-amber-200">{formatCountdown(diceEffect.remainingSeconds)}</p></div>}
     <div className="rounded border border-[var(--event-primary)]/35 bg-[#171717] p-4">
-      <div className="text-center"><p className="text-sm font-black uppercase tracking-[.16em] text-[var(--event-primary)]">{reviewSet?`RISULTATO SET ${reviewSet}`:`Set ${match.score.currentSet} · ${activeSet?'In corso':'Non attivo'}`}</p><div className="mt-4 grid grid-cols-2 gap-3"><ScoreTeam team={teamA} games={reviewedResult?.gamesA??match.score.games.A} disabled={!activeSet||!refereeScoreEnabled||live.isPending} onGame={()=>void run(()=>live.incrementGame(match.id,match.teamAId),'Punteggio aggiornato.')} /><ScoreTeam team={teamB} games={reviewedResult?.gamesB??match.score.games.B} disabled={!activeSet||!refereeScoreEnabled||live.isPending} onGame={()=>void run(()=>live.incrementGame(match.id,match.teamBId),'Punteggio aggiornato.')} /></div><button type="button" disabled={(!activeSet&&!reviewSet)||!refereeScoreEnabled||live.isPending} onClick={()=>{setGamesA(reviewedResult?.gamesA??match.score.games.A);setGamesB(reviewedResult?.gamesB??match.score.games.B);setConfirmCorrection(false);setCorrectionOpen(true)}} className="mt-4 min-h-11 px-4 text-sm font-black underline disabled:opacity-40">MODIFICA RISULTATO</button>{reviewSet&&<button disabled={live.isPending} className="mt-3 min-h-12 w-full rounded bg-[var(--event-primary)] px-4 font-black text-black" onClick={()=>void run(()=>live.submitSetResult(match.id,reviewSet),'Risultato inviato alla Regia.')}>INVIA RISULTATO ALLA REGIA</button>}</div>
+      <div className="text-center"><p className="text-sm font-black uppercase tracking-[.16em] text-[var(--event-primary)]">{reviewSet?`RISULTATO SET ${reviewSet}`:`Set ${match.score.currentSet} · ${activeSet?'In corso':'Non attivo'}`}</p>{activeSet&&<p className="mt-2 text-sm font-bold text-amber-200">Punteggio iniziale di ogni game: {match.genderHandicapAvailable===false?'formazione/genere da verificare':`${match.score.points.A}–${match.score.points.B}`}</p>}<div className="mt-4 grid grid-cols-2 gap-3"><ScoreTeam team={teamA} games={reviewedResult?.gamesA??match.score.games.A} disabled={!activeSet||!refereeScoreEnabled||live.isPending} onGame={()=>void run(()=>live.incrementGame(match.id,match.teamAId),'Punteggio aggiornato.')} /><ScoreTeam team={teamB} games={reviewedResult?.gamesB??match.score.games.B} disabled={!activeSet||!refereeScoreEnabled||live.isPending} onGame={()=>void run(()=>live.incrementGame(match.id,match.teamBId),'Punteggio aggiornato.')} /></div><button type="button" disabled={(!activeSet&&!reviewSet)||!refereeScoreEnabled||live.isPending} onClick={()=>{setGamesA(reviewedResult?.gamesA??match.score.games.A);setGamesB(reviewedResult?.gamesB??match.score.games.B);setConfirmCorrection(false);setCorrectionOpen(true)}} className="mt-4 min-h-11 px-4 text-sm font-black underline disabled:opacity-40">MODIFICA RISULTATO</button>{reviewSet&&<button disabled={live.isPending} className="mt-3 min-h-12 w-full rounded bg-[var(--event-primary)] px-4 font-black text-black" onClick={()=>void run(()=>live.submitSetResult(match.id,reviewSet),'Risultato inviato alla Regia.')}>INVIA RISULTATO ALLA REGIA</button>}</div>
       {(feedback||live.error)&&<p className="mt-3 rounded bg-white/10 p-3 text-sm font-bold">{feedback||live.error}</p>}
     </div>
     {correctionOpen&&<div role="dialog" aria-modal="true" aria-label="Correggi risultato" className="fixed inset-0 z-[1800] grid items-end bg-black/75 sm:place-items-center"><div className="w-full rounded-t-2xl bg-[#171717] p-5 sm:max-w-md sm:rounded-2xl"><h2 className="text-2xl font-black">MODIFICA RISULTATO</h2>{confirmCorrection?<p className="mt-4 text-white/75">Confermi il punteggio {gamesA}–{gamesB}?</p>:<div className="mt-5 grid gap-4"><ScoreStepper label={teamA?.name??'Team A'} value={gamesA} onChange={setGamesA}/><ScoreStepper label={teamB?.name??'Team B'} value={gamesB} onChange={setGamesB}/></div>}<div className="mt-6 grid grid-cols-2 gap-3"><button className="min-h-12 rounded bg-white/10 font-black" onClick={()=>setCorrectionOpen(false)}>ANNULLA</button><button disabled={live.isPending} className="min-h-12 rounded bg-[var(--event-primary)] font-black text-black disabled:opacity-50" onClick={()=>{ if(!confirmCorrection){setConfirmCorrection(true);return} const operation=reviewSet?()=>live.saveSetResult(match.id,reviewSet,gamesA,gamesB):()=>live.setScore(match.id,gamesA,gamesB); void run(operation,'Risultato salvato.').then(()=>setCorrectionOpen(false)) }}>CONFERMA MODIFICA</button></div></div></div>}

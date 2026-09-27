@@ -18,11 +18,11 @@ function renderApp(configure?: (tournament: ReturnType<typeof createDemoTourname
 }
 
 describe('Team mobile app navigation', () => {
-  it('opens Partita by default and keeps three destinations plus the Cards action and logout', () => {
+  it('opens Partita by default and offers Formazione, results, standings, Cards and logout', () => {
     renderApp()
     expect(screen.getByRole('button', { name: 'Partita' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByRole('navigation', { name: 'Navigazione squadra' }).querySelectorAll('button')).toHaveLength(4)
-    expect(Array.from(screen.getByRole('navigation', { name: 'Navigazione squadra' }).querySelectorAll('button')).map(button => button.textContent)).toEqual(['Partita', 'Classifica', 'Risultati', '3Carte'])
+    expect(screen.getByRole('navigation', { name: 'Navigazione squadra' }).querySelectorAll('button')).toHaveLength(5)
+    expect(Array.from(screen.getByRole('navigation', { name: 'Navigazione squadra' }).querySelectorAll('button')).map(button => button.textContent)).toEqual(['Partita', 'Formazione', 'Classifica', 'Risultati', '3Carte'])
     expect(screen.getByRole('button', { name: /Apri carte, \d+ disponibili/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Esci' })).toBeTruthy()
     expect(screen.getAllByText(/team red/i).length).toBeGreaterThan(0)
@@ -51,9 +51,10 @@ describe('Team mobile app navigation', () => {
     expect(screen.getByRole('heading', { name: 'Classifica' })).toBeTruthy()
   })
 
-  it('keeps Set 1 and Set 2 visible, shows the opponent confirmation, and hides STB initially', () => {
+  it('keeps Set 1 and Set 2 visible, shows the opponent confirmation, and hides STB initially', async () => {
     const { tournament } = renderApp()
-    expect(screen.getByRole('button', { name: /Set 1/i })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Formazione/ }))
+    expect(await screen.findByRole('button', { name: /Set 1/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Set 2/i })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Super Tie-Break/i })).toBeNull()
     expect(screen.getByText('Formazione avversaria')).toBeTruthy()
@@ -64,7 +65,7 @@ describe('Team mobile app navigation', () => {
     expect(screen.getByText('Formazione avversaria non ancora disponibile')).toBeTruthy()
   })
 
-  it('makes a started set read-only and reveals STB only when the match requires it', () => {
+  it('makes a started set read-only and reveals STB only when the match requires it', async () => {
     const { tournament } = renderApp(tournament => {
       const match = tournament.matches[0]
       match.set1StartedAt = '2026-09-17T10:00:00Z'
@@ -74,8 +75,9 @@ describe('Team mobile app navigation', () => {
         { teamId: 'team-red', setNumber: 3, activePlayerIds: ['team-red-p2', 'team-red-p3'], benchPlayerId: 'team-red-p1' },
       )
     })
+    fireEvent.click(screen.getByRole('button', { name: /Formazione/ }))
     expect(screen.queryByRole('button', { name: 'Modifica' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /Super Tie-Break/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Super Tie-Break/i }))
     const ownTeam = tournament.teams.find(team => team.id === 'team-red')!
     expect(screen.getAllByText(ownTeam.players[1].name).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'Conferma Set 3' })).toBeNull()

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Alert, Box, Button, Chip, Paper, Stack, Tab, Tabs, Typography } from '@mui/material'
 import { PageShell, SectionHeader, EmptyState, StatusChip } from '../../../shared/components/Foundation'
 import type { Match, Tournament } from '../../../shared/types/domain'
@@ -8,11 +8,10 @@ import { OperationsControls } from './OperationsControls'
 import { getControlRoomRound, getCurrentRoundMatches, getOperationalAttention } from './controlRoomState'
 import { useLiveOrchestrationRepository, type SetAction } from '../../../repositories/liveOrchestrationRepository'
 import { SetTimer } from '../../../shared/components/SetTimer'
-import { useSharedClock } from '../../../shared/hooks/useSharedClock'
-import { getSetTimer } from '../../../domain/live/setTimer'
 import { formatStatusLabel } from '../../../shared/lib/uiLabels'
 import { CardPlayNotification } from '../../../shared/components/LiveEffects'
 import { GlobalDiceReveal } from '../../../shared/components/GlobalDiceReveal'
+import { GlobalSpecialEventReveal } from '../../../shared/components/GlobalSpecialEventReveal'
 import { LiveEventPresenter } from '../../../shared/components/LiveEventPresenter'
 import { RefereeCourtAssignmentsPanel } from './RefereeCourtAssignmentsPanel'
 import { dataProvider } from '../../../repositories'
@@ -37,11 +36,9 @@ export function ControlRoomContent({ tournament, entry: providedEntry, referees 
   const [tab,setTab]=useState<RegiaTab>('overview')
   const [intervention,setIntervention]=useState('')
   const [feedback,setFeedback]=useState('')
-  const expiryRequests=useRef(new Set<string>())
   const entry = providedEntry ?? workspace.entries[tournament.id] ?? entryFromTournament(tournament)
   const round = getControlRoomRound(tournament)
   const matches = getCurrentRoundMatches(tournament, round)
-  const now=useSharedClock()
   const completed = round?.completionCompletedMatches ?? matches.filter(match=>match.status==='completed'&&Boolean(match.resultConfirmedAt)).length
   const total = round?.completionTotalMatches || matches.length
   const blockers = round?.completionBlockers ?? []
@@ -52,11 +49,8 @@ export function ControlRoomContent({ tournament, entry: providedEntry, referees 
   const attention=getOperationalAttention(tournament,round)
   const run=async(action:()=>Promise<unknown>,success:string)=>{setFeedback('');try{await action();setFeedback(success)}catch(cause){setFeedback(cause instanceof Error?cause.message:'Operazione non riuscita.')}}
   const startRound=()=>{if(!round)return;void run(()=>tournament.setControlMode==='referee'?live.openRound(round.id):live.controlRound(round.id,'start_set_1'),`${round.name} avviato.`)}
-  useEffect(()=>{
-    matches.forEach(match=>{const timer=getSetTimer(match,now);const key=`${match.id}:${timer?.setNumber??0}`;if(!timer?.expired||expiryRequests.current.has(key))return;expiryRequests.current.add(key);void live.expireSet(match.id).catch(()=>expiryRequests.current.delete(key))})
-  },[live,matches,now])
   return <PageShell>
-    <GlobalDiceReveal tournament={tournament} audience="admin"/><CardPlayNotification tournament={tournament} audience="admin"/><LiveEventPresenter tournament={tournament} audience="admin"/>
+    <GlobalDiceReveal tournament={tournament} audience="admin"/><GlobalSpecialEventReveal tournament={tournament} audience="admin"/><CardPlayNotification tournament={tournament} audience="admin"/><LiveEventPresenter tournament={tournament} audience="admin"/>
     <Stack direction={{xs:'column',md:'row'}} sx={{justifyContent:'space-between',gap:2}}><SectionHeader eyebrow="Regia" title={tournament.name} detail={round?.name??'Nessun turno configurato'}/><StatusChip label={entry.config.status}/></Stack>
     <Paper sx={{mb:3}}><Tabs value={tab} onChange={(_,value)=>setTab(value)} variant="scrollable" scrollButtons="auto" aria-label="Sezioni Regia"><Tab value="overview" label="PANORAMICA"/><Tab value="turn" label="TURNO"/><Tab value="live" label="LIVE"/><Tab value="settings" label="IMPOSTAZIONI"/></Tabs></Paper>
     {feedback&&<Alert severity={feedback.includes('non')?'error':'success'} sx={{mb:2}}>{feedback}</Alert>}

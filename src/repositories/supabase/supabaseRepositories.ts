@@ -177,7 +177,7 @@ export async function loadSupabaseTournamentById(
   if (!tournamentId.trim()) throw new Error('Tournament ID is required')
   const { data: tournament, error } = await client
     .from('tournaments')
-    .select('id,name,phase,status,teams_count,teams_per_group,gold_qualified_count,silver_qualified_count,courts_count,allow_byes,theme_preset,theme_color,set_control_mode,main_display_mode,main_display_page,main_display_interval_seconds,referee_can_manage_score,referee_can_validate_cards,referee_can_report_event_winner,cards_enabled,display_card_notifications_enabled,dice_enabled,special_events_enabled,default_set_duration_minutes,created_at,updated_at')
+    .select('id,name,phase,status,teams_count,teams_per_group,gold_qualified_count,silver_qualified_count,courts_count,allow_byes,theme_preset,theme_color,set_control_mode,main_display_mode,main_display_page,main_display_interval_seconds,referee_can_manage_score,referee_can_validate_cards,referee_can_report_event_winner,cards_enabled,display_card_notifications_enabled,dice_enabled,special_events_enabled,default_set_duration_minutes,default_timed_card_duration_seconds,created_at,updated_at')
     .eq('id', tournamentId)
     .single()
   if (error) throw new Error(`Unable to load tournament: ${error.message}`)
@@ -195,7 +195,7 @@ async function loadTournamentState(
     selectTournamentRows<SupabaseRoundRow>(client, 'rounds', 'id,tournament_id,name,stage,sequence,status,dice_result,dice_rule_id,dice_started_at,dice_ends_at,dice_rolled_at,opened_at,set_duration_minutes,completion_total_matches,completion_completed_matches,completion_ready,completion_blockers,cards_per_team,card_total_teams,card_ready_teams,card_readiness_ready,card_readiness_blockers', tournament.id, 'sequence'),
     selectTournamentRows<SupabaseTeamRow>(client, 'teams', 'id,name,short_name,color,group_id,ranking', tournament.id, 'short_name'),
     selectPlayersRows(client, tournament.id),
-    selectTournamentRows<SupabaseMatchRow>(client, 'matches', 'id,round_id,group_id,court_id,team_a_id,team_b_id,status,current_set,games_a,games_b,sets_a,sets_b,super_tiebreak_team_a,super_tiebreak_team_b,set_1_started_at,set_1_ended_at,set_2_started_at,set_2_ended_at,completed_at,result_confirmed_at,result_confirmed_by,active_set_duration_minutes,set_1_result_submitted_at,set_2_result_submitted_at', tournament.id, 'created_at'),
+    selectTournamentRows<SupabaseMatchRow>(client, 'matches', 'id,round_id,group_id,court_id,team_a_id,team_b_id,status,current_set,games_a,games_b,sets_a,sets_b,game_start_points_a,game_start_points_b,gender_handicap_available,super_tiebreak_team_a,super_tiebreak_team_b,set_1_started_at,set_1_ended_at,set_2_started_at,set_2_ended_at,completed_at,result_confirmed_at,result_confirmed_by,active_set_duration_minutes,set_1_result_submitted_at,set_2_result_submitted_at', tournament.id, 'created_at'),
     selectMatchScopedRows<SupabaseMatchLineupRow>(client, 'match_lineups', 'match_id,team_id,set_number,active_player_1_id,active_player_2_id,bench_player_id,confirmed_at', tournament.id),
     selectCardDefinitions(client, tournament.id),
     selectMatchScopedRows<SupabaseMatchCardRow>(client, 'match_cards', 'id,match_id,team_id,card_definition_id,status,used_in_set,activated_at,expires_at,remaining_games,stolen_from_team_id', tournament.id),

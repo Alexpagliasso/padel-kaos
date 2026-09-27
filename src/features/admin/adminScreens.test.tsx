@@ -9,6 +9,7 @@ import { ControlRoomContent } from './control-room/ControlRoom'
 import { TournamentSetupContent } from './setup/TournamentSetup'
 
 describe('admin screens', () => {
+  const renderScreen = (content: React.ReactNode) => renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}>{content}</QueryClientProvider>)
   it('renders /admin/setup content', () => {
     const queryClient = new QueryClient()
     const html = renderToStaticMarkup(
@@ -17,7 +18,7 @@ describe('admin screens', () => {
       </QueryClientProvider>,
     )
 
-    expect(html).toContain('Tournament Setup')
+    expect(html).toContain('Configurazione torneo')
     expect(html).toContain('TOURNAMENT')
   })
 
@@ -29,18 +30,17 @@ describe('admin screens', () => {
       </QueryClientProvider>,
     )
 
-    expect(html).toContain('Team access')
-    expect(html).toContain('Username')
-    expect(html).toContain('Password is generated automatically server-side.')
-    expect(html).toContain('Download All Team Credentials')
-    expect(html).toContain('0 credentials ready')
-    expect(html).toContain('Create Team + Login')
+    expect(html).toContain('Accesso squadra')
+    expect(html).toContain('Nome utente')
+    expect(html).toContain('La password viene generata automaticamente dal server.')
+    expect(html).toContain('Scarica tutte le credenziali squadre')
+    expect(html).toContain('Crea squadra')
     expect(html).not.toContain('Manual password')
     expect(html).not.toContain('Confirm password')
   })
 
   it('renders /admin/control-room without a round', () => {
-    const html = renderToStaticMarkup(
+    const html = renderScreen(
       <ControlRoomContent
         tournament={createEmptyTournamentDomain('Empty Control Room')}
         porTresPrizeDraft="Prize"
@@ -50,12 +50,12 @@ describe('admin screens', () => {
       />,
     )
 
-    expect(html).toContain('No round configured')
-    expect(html).toContain('No matches configured')
+    expect(html).toContain('Nessun turno configurato')
+    expect(html).toContain('Nessun turno')
   })
 
   it('renders ControlRoom with a match', () => {
-    const html = renderToStaticMarkup(
+    const html = renderScreen(
       <ControlRoomContent
         tournament={createDemoTournament()}
         porTresPrizeDraft="Prize"
@@ -65,29 +65,29 @@ describe('admin screens', () => {
       />,
     )
 
-    expect(html).toContain('Field Status')
-    expect(html).toContain('TEAM RED')
+    expect(html).toContain('TURNO CORRENTE')
+    expect(html).toContain('ROUND 1')
   })
 
   it('renders main display as a read-only board', () => {
-    const html = renderToStaticMarkup(
+    const html = renderScreen(
       <MemoryRouter>
         <MainDisplayContent tournament={createDemoTournament()} />
       </MemoryRouter>,
     )
 
-    expect(html).toContain('PADEL KAOS LIVE')
+    expect(html).toContain('Maxischermo')
     expect(html).not.toContain('ACTIVATE')
     expect(html).not.toContain('ROLL GLOBAL DICE')
   })
 
   it('renders empty main display state without crashing', () => {
-    const html = renderToStaticMarkup(
+    const html = renderScreen(
       <MemoryRouter>
         <MainDisplayContent tournament={createEmptyTournamentDomain()} />
       </MemoryRouter>,
     )
 
-    expect(html).toContain('No matches configured')
+    expect(html).toContain('0 campi nel turno')
   })
 })

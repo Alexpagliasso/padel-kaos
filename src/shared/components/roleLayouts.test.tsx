@@ -9,10 +9,12 @@ import { RefereeRoute } from '../../routes/RefereeRoute'
 import { CourtDisplayRoute } from '../../routes/CourtDisplayRoute'
 import { MainDisplayRoute } from '../../routes/MainDisplayRoute'
 import { AdminLayout } from '../../features/admin/layout/AdminLayout'
+import { AuthContext, type AuthContextValue } from '../../features/auth/authContext'
 vi.mock('../../repositories', async importOriginal => ({ ...await importOriginal<object>(), dataProvider: 'demo' }))
 
 function renderPage(Page: typeof PlayerRoute) {
-  return renderToStaticMarkup(<TournamentThemeProvider><QueryClientProvider client={new QueryClient()}><AuthProvider><MemoryRouter><Page /></MemoryRouter></AuthProvider></QueryClientProvider></TournamentThemeProvider>)
+  const admin: AuthContextValue = { status: 'authenticated', session: null, profile: { id: 'admin', tournamentId: 'demo-tournament', username: 'admin', displayName: 'Admin', role: 'admin' }, signInWithUsername: vi.fn(), reauthenticateForReset: vi.fn(), logout: vi.fn(), refreshProfile: vi.fn() }
+  return renderToStaticMarkup(<TournamentThemeProvider><QueryClientProvider client={new QueryClient()}>{Page === AdminLayout ? <AuthContext.Provider value={admin}><MemoryRouter><Page /></MemoryRouter></AuthContext.Provider> : <AuthProvider><MemoryRouter><Page /></MemoryRouter></AuthProvider>}</QueryClientProvider></TournamentThemeProvider>)
 }
 describe('role layout isolation, including demo admin profile', () => {
   it.each([['player', PlayerRoute], ['referee', RefereeRoute], ['court', CourtDisplayRoute], ['main', MainDisplayRoute]] as const)('%s has no admin or cross-role links', (_, Page) => {
@@ -27,7 +29,7 @@ describe('role layout isolation, including demo admin profile', () => {
   })
   it('admin has its sidebar and appearance link', () => {
     const html = renderPage(AdminLayout)
-    expect(html).toContain('Admin navigation')
+    expect(html).toContain('Navigazione Admin')
     expect(html).toContain('href="/admin/appearance"')
     expect(html).toContain('MuiDrawer')
   })

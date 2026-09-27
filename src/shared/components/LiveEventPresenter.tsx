@@ -8,23 +8,24 @@ import { dataProvider } from '../../repositories'
 import { requireSupabase } from '../../services/supabase/client'
 import { supabaseTournamentKeys } from '../../repositories/supabase/queryKeys'
 import { DICE_DISMISSED_EVENT, openDiceReveal } from '../../domain/live/dicePresentation'
+import { openSpecialEventReveal, SPECIAL_EVENT_DISMISSED_EVENT } from '../../domain/live/specialEventPresentation'
+import { useTournamentGlobalRealtime } from '../hooks/useTournamentGlobalRealtime'
 
 export function LiveEventPresenter({tournament,audience,matchIds,courtId,teamId,subscribe=true}:{tournament:Tournament;audience:LiveAudience;matchIds?:string[];courtId?:string;teamId?:string;subscribe?:boolean}){
   const [queue,setQueue]=useState<LivePresentation[]>([]);const initialized=useRef(false);const now=useSharedClock();const queryClient=useQueryClient()
   const [,forceRefresh]=useState(0)
-  useEffect(()=>{const update=()=>forceRefresh(value=>value+1);window.addEventListener(DICE_DISMISSED_EVENT,update);return()=>window.removeEventListener(DICE_DISMISSED_EVENT,update)},[])
+  useTournamentGlobalRealtime(tournament.id,audience)
+  useEffect(()=>{const update=()=>forceRefresh(value=>value+1);window.addEventListener(DICE_DISMISSED_EVENT,update);window.addEventListener(SPECIAL_EVENT_DISMISSED_EVENT,update);return()=>{window.removeEventListener(DICE_DISMISSED_EVENT,update);window.removeEventListener(SPECIAL_EVENT_DISMISSED_EVENT,update)}},[])
   const scopeKey=(matchIds??[]).join(',')
   const candidates=useMemo(()=>buildLivePresentations(tournament,audience,{matchIds,courtId,teamId}),[audience,courtId,scopeKey,teamId,tournament])
-  const diceRevealActive=Boolean(openDiceReveal(tournament,audience,now))
+  const diceRevealActive=Boolean(openDiceReveal(tournament,audience,now)||openSpecialEventReveal(tournament,audience,now))
   useEffect(()=>{
     if(!subscribe||dataProvider!=='supabase'||!tournament.id||tournament.id==='empty-tournament'||tournament.id==='demo-tournament')return
     const client=requireSupabase();const refresh=()=>{void queryClient.invalidateQueries({queryKey:supabaseTournamentKeys.detail(tournament.id)})}
     const channel=client.channel(`live-presentations:${tournament.id}:${crypto.randomUUID()}`)
       .on('postgres_changes',{event:'*',schema:'public',table:'matches',filter:`tournament_id=eq.${tournament.id}`},refresh)
-      .on('postgres_changes',{event:'*',schema:'public',table:'rounds',filter:`tournament_id=eq.${tournament.id}`},refresh)
       .on('postgres_changes',{event:'*',schema:'public',table:'match_events',filter:`tournament_id=eq.${tournament.id}`},refresh)
       .on('postgres_changes',{event:'*',schema:'public',table:'tournament_events',filter:`tournament_id=eq.${tournament.id}`},refresh)
-      .on('postgres_changes',{event:'*',schema:'public',table:'global_events',filter:`tournament_id=eq.${tournament.id}`},refresh)
       .subscribe()
     return()=>{void client.removeChannel(channel)}
   },[queryClient,tournament.id,subscribe])
@@ -33,13 +34,13 @@ export function LiveEventPresenter({tournament,audience,matchIds,courtId,teamId,
     if(!initialized.current){keys.forEach(key=>sessionStorage.setItem(key,'seen'));initialized.current=true;return}
     const fresh=candidates.filter(item=>sessionStorage.getItem(`padel-kaos:live-event:${audience}:${item.id}`)!=='seen'&&Date.now()-new Date(item.createdAt).getTime()<item.expiresAfterMs)
     keys.forEach(key=>sessionStorage.setItem(key,'seen'))
-    if(fresh.length)setQueue(current=>[...current,...fresh].sort((a,b)=>b.priority-a.priority||new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()))
+    if(fresh.length)queueMicrotask(()=>setQueue(current=>[...current,...fresh].sort((a,b)=>b.priority-a.priority||new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime())))
   },[audience,candidates])
   const current=queue[0]
   useEffect(()=>{
     if(!current||diceRevealActive)return
     const remaining=current.expiresAfterMs-(Date.now()-new Date(current.createdAt).getTime())
-    if(remaining<=0){setQueue(items=>items.slice(1));return}
+    if(remaining<=0){queueMicrotask(()=>setQueue(items=>items.slice(1)));return}
     const timer=window.setTimeout(()=>setQueue(items=>items.slice(1)),Math.min(remaining,current.category==='SHOW_EVENT'?9000:6000))
     return()=>window.clearTimeout(timer)
   },[current,diceRevealActive])

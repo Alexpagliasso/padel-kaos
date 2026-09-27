@@ -37,4 +37,19 @@ describe('GlobalDiceReveal',()=>{
     fireEvent.click(screen.getByRole('button',{name:'CONTINUA'}))
     expect(screen.queryByRole('dialog',{name:'Risultato dado globale'})).toBeNull()
   })
+  it('starts a second cinematic for the same face in the next round',async()=>{
+    sessionStorage.clear()
+    const tournament=createDemoTournament()
+    const first=tournament.rounds![0]
+    const rule=tournament.diceRules[0]
+    first.diceResult=rule.value;first.diceRuleId=rule.id;first.diceRolledAt=new Date(Date.now()-7000).toISOString()
+    const client=new QueryClient()
+    const view=render(<QueryClientProvider client={client}><GlobalDiceReveal tournament={tournament} audience="admin"/></QueryClientProvider>)
+    fireEvent.click(screen.getByRole('button',{name:'CONTINUA'}))
+    expect(screen.queryByRole('dialog',{name:'Risultato dado globale'})).toBeNull()
+    const next={...first,id:'next-round',sequence:first.sequence+1,diceRolledAt:new Date().toISOString()}
+    view.rerender(<QueryClientProvider client={client}><GlobalDiceReveal tournament={{...tournament,rounds:[first,next]}} audience="admin"/></QueryClientProvider>)
+    expect(await screen.findByRole('dialog',{name:'Risultato dado globale'})).toBeTruthy()
+    expect(screen.getByLabelText('Dado: in movimento')).toBeTruthy()
+  })
 })

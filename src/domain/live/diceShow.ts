@@ -10,13 +10,12 @@ export type DiceFace = {
   artwork: string
   rotation: { x: number; y: number; z: number }
 }
-
 export const diceFaces: readonly DiceFace[] = [
   { value: 1, productCode: 'one_vs_one', title: '1 VS 1', shortDescription: 'Per cinque minuti si gioca uno contro uno.', artwork: '/dice/1vs1-placeholder.svg', rotation: { x: 0, y: 0, z: 0 } },
   { value: 2, productCode: 'three_vs_three', title: '3 VS 3', shortDescription: 'Per cinque minuti si gioca tre contro tre.', artwork: '/dice/3vs3-placeholder.svg', rotation: { x: 0, y: -90, z: 0 } },
   { value: 3, productCode: 'deflated_balls', title: 'PALLINE SGONFIE', shortDescription: 'Per cinque minuti si usano palline sgonfie.', artwork: '/dice/palline-sgonfie-placeholder.svg', rotation: { x: 0, y: 180, z: 0 } },
   { value: 4, productCode: 'tennis_balls', title: 'PALLINE TENNIS', shortDescription: 'Per cinque minuti si usano palline da tennis.', artwork: '/dice/palline-tennis-placeholder.svg', rotation: { x: 0, y: 90, z: 0 } },
-  { value: 5, productCode: 'single_serve', title: '1 SOLO SERVIZIO', shortDescription: 'Per cinque minuti è consentito un solo servizio.', artwork: '/dice/un-servizio-placeholder.svg', rotation: { x: -90, y: 0, z: 0 } },
+  { value: 5, productCode: 'single_serve', title: '1 SOLO SERVIZIO', shortDescription: 'Per cinque minuti è consentito un solo servizio.', artwork: '/dice/un-solo-servizio-placeholder.svg', rotation: { x: -90, y: 0, z: 0 } },
   { value: 6, productCode: 'no_glass', title: 'NO VETRI', shortDescription: 'Per cinque minuti i vetri non sono validi.', artwork: '/dice/no-vetri-placeholder.svg', rotation: { x: 90, y: 0, z: 0 } },
 ]
 
@@ -25,7 +24,6 @@ export function getDiceFace(rule: DiceRule | undefined, result: number | undefin
   const face = diceFaces.find(item => item.value === result)
   return face && (!rule.productCode || rule.productCode === face.productCode) ? face : undefined
 }
-
 export function getLatestDiceReveal(tournament: Tournament): { round: Round; face: DiceFace; rolledAt: number } | undefined {
   const rounds = [...(tournament.rounds ?? [])].filter(round => round.diceRolledAt && round.diceResult && round.diceRuleId)
   rounds.sort((a, b) => Date.parse(b.diceRolledAt!) - Date.parse(a.diceRolledAt!))

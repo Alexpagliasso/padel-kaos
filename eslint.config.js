@@ -19,4 +19,14 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // Route/component modules expose named render targets and pure helpers to
+    // integration tests. They are not consumed through Vite hot-reload boundaries.
+    files: [
+      'src/features/player/TeamMobileApp.tsx',
+      'src/routes/PlayerRoute.tsx',
+      'src/routes/RefereeRoute.tsx',
+    ],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 ])

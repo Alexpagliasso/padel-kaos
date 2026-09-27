@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, CalendarDays, Check, ChevronLeft, ChevronRight, CreditCard, Info, Mars, Swords, Table2, Venus, X } from 'lucide-react'
+import { ArrowLeft, CalendarDays, Check, ChevronLeft, ChevronRight, CreditCard, Info, Mars, Swords, Table2, Users, Venus, X } from 'lucide-react'
 import { Dialog, IconButton } from '@mui/material'
 import { MobileRoleShell } from '../../shared/components/Foundation'
 import { validateMatchLineup } from '../../domain/rules/rulesEngine'
@@ -13,14 +13,15 @@ import { EventPresentationOverlay } from '../../shared/components/EventPresentat
 import { GlobalEventOverlay } from '../../shared/components/GlobalEventOverlay'
 import { getDiceRuleForMatch } from '../tournament/selectors'
 import { formatCountdown, getDiceEffect } from '../../domain/live/readiness'
-import { ActiveCardEffects, ActiveDiceIndicator, CardPlayNotification } from '../../shared/components/LiveEffects'
+import { ActiveDiceIndicator, CardPlayNotification } from '../../shared/components/LiveEffects'
 import { GlobalDiceReveal } from '../../shared/components/GlobalDiceReveal'
+import { GlobalSpecialEventReveal } from '../../shared/components/GlobalSpecialEventReveal'
 import { SetTimer } from '../../shared/components/SetTimer'
 import { useSharedClock } from '../../shared/hooks/useSharedClock'
 import { groupStandings } from '../../domain/standings/groupStandings'
 import { LiveEventPresenter } from '../../shared/components/LiveEventPresenter'
 
-type TeamTab = 'match' | 'standings' | 'results'
+type TeamTab = 'match' | 'lineup' | 'standings' | 'results'
 
 export function TeamMobileApp({ tournament, events, routeState, onSelectDemoTeam, onPlayDemoCard, headerAction }: {
   tournament: Tournament
@@ -44,37 +45,42 @@ export function TeamMobileApp({ tournament, events, routeState, onSelectDemoTeam
   const match = matches.find(item => item.id === selectedMatchId) ?? routeState.match
   const matchCards = getOwnMatchCards(cards, playerTeam.id, match.id)
   const diceEffect = getDiceEffect(tournament, match)
+  const requiredLineupSet=getRequiredLineupSet(match)
+  const lineupActionRequired=requiredLineupSet!==null&&!match.lineups.some(lineup=>lineup.teamId===playerTeam.id&&lineup.setNumber===requiredLineupSet)
 
   return <MobileRoleShell title={playerTeam.name} status={tournament.status ?? match.status} action={headerAction}><CardPlayNotification tournament={tournament} audience="team" matchIds={[match.id]} excludeTeamId={playerTeam.id}/><LiveEventPresenter tournament={tournament} audience="team" matchIds={[match.id]} teamId={playerTeam.id}/>
-    <GlobalDiceReveal tournament={tournament} audience="team" />
+    <GlobalDiceReveal tournament={tournament} audience="team" /><GlobalSpecialEventReveal tournament={tournament} audience="team" />
     <main className="mx-auto w-full max-w-3xl overflow-x-hidden px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-4">
       <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
         <div className="min-w-0"><p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">{showDemoTeamSelector ? 'Demo giocatore' : 'Area giocatore'}</p><p className="truncate text-sm text-white/60">Ciao {greetingName}</p></div>
         {showDemoTeamSelector ? <select aria-label="Visualizza come squadra" className="max-w-40 rounded-xl border border-white/10 bg-black px-3 py-2 text-sm text-white" value={playerTeam.id} onChange={event => onSelectDemoTeam(event.target.value)}>{tournament.teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select> : null}
       </div>
+      <TeamLiveStatus tournament={tournament} match={match} teamId={playerTeam.id} />
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={tab} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: .16 }}>
           {tab === 'match' && <TeamMatchTab tournament={tournament} events={events} team={playerTeam} match={match} matches={matches} onSelectMatch={setSelectedMatchId} />}
+          {tab === 'lineup' && <TeamLineupTab tournament={tournament} team={playerTeam} match={match} />}
           {tab === 'standings' && <TeamStandingsTab tournament={tournament} team={playerTeam} />}
           {tab === 'results' && <TeamResultsTab tournament={tournament} team={playerTeam} matches={matches} selectedMatchId={match.id} onSelectMatch={(id) => { setSelectedMatchId(id); setTab('match') }} />}
         </motion.div>
       </AnimatePresence>
     </main>
-    <TeamBottomNavigation active={tab} cardsCount={tournament.cardsEnabled===false?0:matchCards.length} onChange={setTab} onOpenCards={() => setDeckOpen(true)} />
+    <TeamBottomNavigation active={tab} cardsCount={tournament.cardsEnabled===false?0:matchCards.length} lineupActionRequired={lineupActionRequired} onChange={setTab} onOpenCards={() => setDeckOpen(true)} />
     <TeamCardDeck open={deckOpen&&tournament.cardsEnabled!==false} onClose={() => setDeckOpen(false)} cards={matchCards} definitions={tournament.cards} demo={showDemoTeamSelector} onPlayDemoCard={onPlayDemoCard} blockedReason={diceEffect.active ? 'Carte bloccate durante l’effetto del dado' : undefined} />
   </MobileRoleShell>
 }
 
-export function TeamBottomNavigation({ active, cardsCount, onChange, onOpenCards }: { active: TeamTab; cardsCount: number; onChange: (tab: TeamTab) => void; onOpenCards: () => void }) {
+export function TeamBottomNavigation({ active, cardsCount, lineupActionRequired=false, onChange, onOpenCards }: { active: TeamTab; cardsCount: number; lineupActionRequired?:boolean; onChange: (tab: TeamTab) => void; onOpenCards: () => void }) {
   const items = [
     { id: 'match' as const, label: 'Partita', icon: Swords },
+    { id: 'lineup' as const, label: 'Formazione', icon: Users },
     { id: 'standings' as const, label: 'Classifica', icon: Table2 },
     { id: 'results' as const, label: 'Risultati', icon: CalendarDays },
   ]
-  return <nav aria-label="Navigazione squadra" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0b0b0b]/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_32px_rgba(0,0,0,.35)] backdrop-blur-xl"><div className="mx-auto grid max-w-lg grid-cols-4 items-end px-2 py-2"><NavItem item={items[0]} active={active} onChange={onChange} /><NavItem item={items[1]} active={active} onChange={onChange} /><NavItem item={items[2]} active={active} onChange={onChange} /><button type="button" aria-label={cardsCount ? `Apri carte, ${cardsCount} disponibili` : 'Apri carte, nessuna disponibile'} disabled={!cardsCount} onClick={onOpenCards} className="relative grid min-h-14 place-items-center gap-1 rounded-xl text-xs font-black uppercase tracking-wide text-[var(--event-primary)] disabled:text-white/30"><span className="relative -mt-5 grid size-12 place-items-center rounded-xl border border-[var(--event-primary)]/50 bg-[var(--event-primary)] text-black shadow-[0_0_24px_var(--event-soft)]"><CreditCard className="size-5" />{cardsCount > 0 && <span className="absolute -right-2 -top-2 grid size-5 place-items-center rounded-full bg-white text-[10px] font-black text-black">{cardsCount}</span>}</span><span>Carte</span></button></div></nav>
+  return <nav aria-label="Navigazione squadra" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0b0b0b]/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_32px_rgba(0,0,0,.35)] backdrop-blur-xl"><div className="mx-auto grid max-w-lg grid-cols-5 items-end px-1 py-2"><NavItem item={items[0]} active={active} onChange={onChange} /><NavItem item={items[1]} active={active} onChange={onChange} actionRequired={lineupActionRequired}/><NavItem item={items[2]} active={active} onChange={onChange} /><NavItem item={items[3]} active={active} onChange={onChange} /><button type="button" aria-label={cardsCount ? `Apri carte, ${cardsCount} disponibili` : 'Apri carte, nessuna disponibile'} disabled={!cardsCount} onClick={onOpenCards} className="relative grid min-h-14 place-items-center gap-1 rounded-xl text-[10px] font-black uppercase tracking-wide text-[var(--event-primary)] disabled:text-white/30"><span className="relative -mt-5 grid size-12 place-items-center rounded-xl border border-[var(--event-primary)]/50 bg-[var(--event-primary)] text-black shadow-[0_0_24px_var(--event-soft)]"><CreditCard className="size-5" />{cardsCount > 0 && <span className="absolute -right-2 -top-2 grid size-5 place-items-center rounded-full bg-white text-[10px] font-black text-black">{cardsCount}</span>}</span><span>Carte</span></button></div></nav>
 }
 
-function NavItem({ item, active, onChange }: { item: { id: TeamTab; label: string; icon: typeof Swords }; active: TeamTab; onChange: (tab: TeamTab) => void }) { const selected = active === item.id; return <button type="button" aria-current={selected ? 'page' : undefined} onClick={() => onChange(item.id)} className={`grid min-h-14 place-items-center gap-1 rounded-xl text-xs font-black uppercase tracking-wide transition ${selected ? 'bg-[var(--event-primary)]/15 text-[var(--event-primary)]' : 'text-white/55'}`}><item.icon className="size-5" />{item.label}</button> }
+function NavItem({ item, active, onChange, actionRequired=false }: { item: { id: TeamTab; label: string; icon: typeof Swords }; active: TeamTab; onChange: (tab: TeamTab) => void;actionRequired?:boolean }) { const selected = active === item.id; return <button type="button" aria-current={selected ? 'page' : undefined} aria-label={actionRequired?`${item.label}: azione richiesta`:item.label} onClick={() => onChange(item.id)} className={`relative grid min-h-14 place-items-center gap-1 rounded-xl text-[10px] font-black uppercase tracking-wide transition ${selected||actionRequired ? 'bg-[var(--event-primary)]/15 text-[var(--event-primary)]' : 'text-white/55'}`}><item.icon className="size-5" />{item.label}{actionRequired&&<span className="absolute right-2 top-1 size-2 rounded-full bg-amber-300"/>}</button> }
 
 function TeamMatchTab({ tournament, events, team, match, matches, onSelectMatch }: { tournament: Tournament; events: DemoEvent[]; team: Team; match: Match; matches: Match[]; onSelectMatch: (id: string) => void }) {
   const diceNow = useSharedClock()
@@ -92,16 +98,27 @@ function TeamMatchTab({ tournament, events, team, match, matches, onSelectMatch 
       <div className="absolute -right-12 -top-12 size-36 rounded-full bg-[var(--event-primary)]/10 blur-3xl" />
       <div className="relative text-center"><div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-white/60"><span>{round?.name ?? 'Turno'}</span><span>·</span><span>{court?.name ?? 'Campo da assegnare'}</span></div>{live && <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-black uppercase text-emerald-300"><span className="size-2 rounded-full bg-emerald-300" />In corso</p>}<div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3"><h1 className="min-w-0 break-words text-xl font-black leading-tight">{team.name}</h1><span className="text-sm font-black text-[var(--event-primary)]">VS</span><h2 className="min-w-0 break-words text-xl font-black leading-tight">{opponent?.name ?? 'Avversario'}</h2></div><p className="mt-5 text-2xl font-black">{matchSetLabel(match)}</p><p className="mt-1 text-sm text-white/60">{matchStatusLabel(match.status)}</p></div>
     </section>
-    <SetTimer match={match} size="large" />
     <TeamCardLiveNotice tournament={tournament} match={match} team={team} />
     <TeamCardAssignmentState tournament={tournament} match={match} team={team} />
     <section className="rounded-xl border border-white/10 bg-white/[.04] p-3"><p className="text-xs font-black uppercase tracking-[.16em] text-white/45">Stato partita</p><p className="mt-1 text-base font-black text-[var(--event-primary)]">{matchStatusLabel(match.status)}</p></section>
-    <ActiveDiceIndicator tournament={tournament} match={match} />
-    <ActiveCardEffects tournament={tournament} match={match} viewerTeamId={team.id} />
-    <TeamSetAccordion tournament={tournament} team={team} opponent={opponent} match={match} />
-    {diceRule && <section className="rounded-2xl border border-[var(--event-primary)]/25 bg-[var(--event-primary)]/10 p-4"><p className="text-xs font-black uppercase text-[var(--event-primary)]">Dado globale · {diceRule.value}</p><p className="mt-1 font-black">{diceRule.title}</p><p className="mt-1 text-sm text-white/65">{diceRule.description}</p>{diceEffect.active && <p className="mt-2 font-black text-amber-300">Carte bloccate · {formatCountdown(diceEffect.remainingSeconds)}</p>}</section>}
+    {diceEffect.active&&diceRule&&<p className="text-sm font-bold text-amber-200">Carte bloccate durante l'effetto del dado · {formatCountdown(diceEffect.remainingSeconds)}</p>}
     <GlobalEventOverlay event={globalEvent} />
   </div>
+}
+
+function TeamLineupTab({tournament,team,match}:{tournament:Tournament;team:Team;match:Match}) {
+  const opponent=tournament.teams.find(item=>item.id===(match.teamAId===team.id?match.teamBId:match.teamAId))
+  return <section className="mt-4 grid gap-3"><h1 className="text-2xl font-black uppercase">Formazione</h1><TeamSetAccordion tournament={tournament} team={team} opponent={opponent} match={match}/></section>
+}
+
+function TeamLiveStatus({tournament,match,teamId}:{tournament:Tournament;match:Match;teamId:string}) {
+  const now=useSharedClock()
+  const dice=getDiceEffect(tournament,match,now)
+  const activeCards=tournament.teamCards.filter(card=>card.matchId===match.id&&card.state==='active'&&(!card.expiresAt||Date.parse(card.expiresAt)>now))
+  const activeEvent=tournament.globalEvents.find(event=>event.status==='active')
+  const visible=Boolean(match.status==='live_set_1'||match.status==='live_set_2'||dice.active||activeCards.length||activeEvent)
+  if(!visible)return null
+  return <aside aria-label="Stato live" className="sticky top-0 z-30 mb-4 grid gap-1 rounded-xl border border-white/20 bg-[#111]/95 p-2 shadow-xl backdrop-blur"><SetTimer match={match} size="compact"/>{dice.active&&<ActiveDiceIndicator tournament={tournament} match={match}/>}<div className="flex flex-wrap gap-1">{match.genderHandicapAvailable&&['live_set_1','live_set_2'].includes(match.status)&&<span className="rounded bg-amber-400/15 px-2 py-1 text-xs font-bold text-amber-100">INIZIO GAME · {match.score.points.A}–{match.score.points.B}</span>}{activeEvent&&<span className="rounded bg-fuchsia-400/15 px-2 py-1 text-xs font-bold text-fuchsia-100">EVENTO · {activeEvent.title}</span>}{activeCards.map(card=>{const definition=tournament.cards.find(item=>item.id===card.cardId);return <span key={card.id} className="rounded bg-emerald-400/15 px-2 py-1 text-xs font-bold text-emerald-100">{card.teamId===teamId?'TUA CARTA':'CARTA AVVERSARIA'} · {definition?.name??'Carta'}</span>})}</div></aside>
 }
 
 function TeamCardAssignmentState({ tournament, match, team }: { tournament: Tournament; match: Match; team: Team }) {
@@ -116,7 +133,7 @@ function TeamCardAssignmentState({ tournament, match, team }: { tournament: Tour
 
 function TeamSetAccordion({ tournament, team, opponent, match }: { tournament: Tournament; team: Team; opponent?: Team; match: Match }) {
   const [openSets, setOpenSets] = useState<Record<number, boolean>>({ 1: true, 2: false, 3: false })
-  useEffect(() => setOpenSets({ 1: true, 2: false, 3: false }), [match.id])
+  useEffect(() => {const timer=window.setTimeout(()=>setOpenSets({ 1: true, 2: false, 3: false }),0);return()=>window.clearTimeout(timer)}, [match.id])
   const sets = isSuperTieBreakRequired(match) ? [1, 2, 3] : [1, 2]
   return <section aria-label="Formazioni per set" className="grid gap-2">{sets.map(setNumber => {
     const own = match.lineups.find(item => item.teamId === team.id && item.setNumber === setNumber)
@@ -147,7 +164,7 @@ function TeamOwnSetLineup({ tournament, team, match, setNumber, editable }: { to
   const [editing, setEditing] = useState(editable && !persisted)
   const [selected, setSelected] = useState<string[]>(persisted?.activePlayerIds ?? [])
   const [feedback, setFeedback] = useState('')
-  useEffect(() => { setSelected(persisted?.activePlayerIds ?? []); setEditing(editable && !persisted); setFeedback('') }, [match.id, setNumber, editable, persisted?.confirmedAt])
+  useEffect(() => {const timer=window.setTimeout(()=>{ setSelected(persisted?.activePlayerIds ?? []); setEditing(editable && !persisted); setFeedback('') },0);return()=>window.clearTimeout(timer)}, [match.id, setNumber, editable, persisted?.confirmedAt])
   const used = match.lineups.filter(item => item.teamId === team.id && item.setNumber !== setNumber && item.setNumber < 3)
   const validation = validateMatchLineup({ candidate: { activePlayerIds: selected }, usedLineups: used, roster: team.players })
   const toggle = (id: string) => setSelected(current => current.includes(id) ? current.filter(value => value !== id) : current.length < 2 ? [...current, id] : [current[1], id])
@@ -165,13 +182,14 @@ function ReadOnlyLineup({ title, lineup, team, unavailable }: { title: string; l
 function LineupPlayers({ lineup, team }: { lineup: Match['lineups'][number]; team: Team }) { return <div className="grid gap-1.5">{lineup.activePlayerIds.map(id => { const player = team.players.find(item => item.id === id); const Gender = player?.gender === 'woman' ? Venus : player?.gender === 'man' ? Mars : null; return <div key={id} className="flex min-h-11 items-center justify-between rounded-lg bg-black/25 px-3"><span className="text-sm font-bold">{player ? getPlayerDisplayName(player) : 'Giocatore'}</span>{player && <span className="flex items-center gap-1 text-xs text-white/50">{Gender && <Gender className="size-3.5" />}{genderLabel(player.gender)}</span>}</div> })}</div> }
 
 export function TeamCardDeck({ open, onClose, cards, definitions, demo: _demo, onPlayDemoCard, blockedReason }: { open: boolean; onClose: () => void; cards: TeamCard[]; definitions: CardDefinition[]; demo: boolean; onPlayDemoCard: (id: string) => string | Promise<string>; blockedReason?: string }) {
+  void _demo
   const [index, setIndex] = useState(0)
   const [detail, setDetail] = useState<{ teamCard: TeamCard; definition: CardDefinition } | null>(null)
   const reducedMotion = useReducedMotion()
   const [pendingCardId, setPendingCardId] = useState('')
   const [cardFeedback, setCardFeedback] = useState('')
   const now = useSharedClock()
-  useEffect(() => { if (open) { setIndex(0); setDetail(null) } }, [open])
+  useEffect(() => {const timer=window.setTimeout(()=>{ if (open) { setIndex(0); setDetail(null) } },0);return()=>window.clearTimeout(timer)}, [open])
   const visible = cards.map(teamCard => ({ teamCard, definition: definitions.find(card => card.id === teamCard.cardId) })).filter((item): item is { teamCard: TeamCard; definition: CardDefinition } => Boolean(item.definition))
   const move = (direction: number) => setIndex(current => visible.length ? (current + direction + visible.length) % visible.length : 0)
   const positionOf = (cardIndex: number) => {

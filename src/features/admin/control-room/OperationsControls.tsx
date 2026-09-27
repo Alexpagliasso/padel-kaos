@@ -23,16 +23,20 @@ export function OperationsControls({ entry, tournament, matches, roundId, roundN
   const [cardsPerTeam, setCardsPerTeam] = useState(defaultCardsPerTeam)
   const [liveFeedback, setLiveFeedback] = useState('')
   const [defaultDuration,setDefaultDuration]=useState(tournament.defaultSetDurationMinutes??15)
+  const [timedCardMinutes,setTimedCardMinutes]=useState(tournament.defaultTimedCardDurationMinutes??5)
+  useEffect(()=>{const timer=window.setTimeout(()=>setTimedCardMinutes(tournament.defaultTimedCardDurationMinutes??5),0);return()=>window.clearTimeout(timer)},[tournament.defaultTimedCardDurationMinutes])
   const [roundDuration,setRoundDuration]=useState(sourceDuration(tournament,roundId))
   const live = useLiveOrchestrationRepository(tournament.id)
   const events = state.events.filter(event => entry.activeEvents.includes(event.id))
   const selectedId = events.some(event => event.id === eventId) ? eventId : events[0]?.id ?? ''
   const active = entry.launchedEvent && !entry.launchedEvent.endedAt ? entry.launchedEvent : undefined
   const sourceRound = tournament.rounds?.find(round => round.id === roundId)
-  useEffect(() => { setCardsPerTeam(sourceRound?.cardsPerTeam ?? defaultCardsPerTeam) }, [sourceRound?.cardsPerTeam, sourceRound?.id])
+  useEffect(() => { const timer=window.setTimeout(()=>setCardsPerTeam(sourceRound?.cardsPerTeam ?? defaultCardsPerTeam),0);return()=>window.clearTimeout(timer) }, [sourceRound?.cardsPerTeam, sourceRound?.id])
   const dice = sourceRound?.diceResult ? { value: sourceRound.diceResult, rolledAt: sourceRound.diceRolledAt } : undefined
   const diceFace = getDiceFace(tournament.diceRules.find(rule => rule.id === sourceRound?.diceRuleId), sourceRound?.diceResult)
   const cardsLocked = roundCardsLocked(sourceRound, matches)
+  const timedCardDurationLocked=(tournament.rounds?.some(round=>Boolean(round.openedAt)&&round.status!=='completed')??false)
+    ||tournament.matches.some(match=>Boolean(match.set1StartedAt)&&!match.resultConfirmedAt)
   const setOneReadiness = matches.map(match => ({ match, result: getPersistedSetResult(tournament, match.id, 1), court: tournament.courts.find(court => court.id === match.courtId)?.name ?? 'Campo' }))
   const missingResults = setOneReadiness.filter(item => !item.match.set1EndedAt || !item.result)
   const canRollDice = tournament.diceEnabled!==false && Boolean(roundId) && matches.length > 0 && missingResults.length === 0 && matches.every(match => match.status === 'set_break') && !dice
@@ -83,6 +87,9 @@ export function OperationsControls({ entry, tournament, matches, roundId, roundN
       <Typography sx={{fontWeight:900,mt:2}}>DURATA SET</Typography><Typography color="text.secondary" sx={{mb:1}}>Durata effettiva del turno: {sourceRound?.effectiveSetDurationMinutes??tournament.defaultSetDurationMinutes??15} minuti</Typography><Stack direction={{xs:'column',sm:'row'}} spacing={2}><TextField type="number" label="Durata predefinita (minuti)" value={defaultDuration} disabled={timedSetActive} slotProps={{htmlInput:{min:1,max:180}}} onChange={event=>setDefaultDuration(Math.max(1,Number(event.target.value)))}/><Button variant="outlined" disabled={timedSetActive||live.isPending} onClick={()=>void run(()=>live.setDefaultSetDuration(defaultDuration),'Durata predefinita salvata.')}>SALVA DEFAULT</Button></Stack>
       {roundId&&<Stack direction={{xs:'column',sm:'row'}} spacing={2} sx={{mt:2}}><TextField type="number" label="Durata turno (minuti)" value={roundDuration} disabled={timedSetActive} placeholder={`${tournament.defaultSetDurationMinutes??15}`} slotProps={{htmlInput:{min:1,max:180}}} onChange={event=>setRoundDuration(event.target.value)}/><Button variant="outlined" disabled={timedSetActive||live.isPending} onClick={()=>void run(()=>live.setRoundSetDuration(roundId,roundDuration===''?undefined:Number(roundDuration)),'Durata del turno salvata.')}>SALVA TURNO</Button></Stack>}
       {timedSetActive&&<Alert severity="warning" sx={{mt:1}}>NON MODIFICABILE DURANTE IL SET</Alert>}
+      <Typography sx={{fontWeight:900,mt:2}}>DURATA CARTE TEMPORIZZATE</Typography><Stack direction={{xs:'column',sm:'row'}} spacing={2} sx={{mt:1}}><TextField type="number" label="Durata predefinita (minuti)" value={timedCardMinutes} disabled={timedCardDurationLocked} slotProps={{htmlInput:{min:1,max:180,step:1}}} onChange={event=>setTimedCardMinutes(Number(event.target.value))}/><Button variant="outlined" disabled={timedCardDurationLocked||live.isPending||!Number.isInteger(timedCardMinutes)||timedCardMinutes<1||timedCardMinutes>180} onClick={()=>void run(()=>live.setDefaultTimedCardDuration(timedCardMinutes),'Durata carte salvata.')}>SALVA DURATA CARTE</Button></Stack>
+      <Typography color="text.secondary" sx={{mt:1,fontSize:13}}>Valore predefinito per nuove carte a tempo; le durate specifiche delle carte esistenti restano invariate.</Typography>
+      {timedCardDurationLocked&&<Alert severity="info" sx={{mt:1}}>MODIFICABILE TRA UN TURNO E L'ALTRO</Alert>}
       {activeSet&&<Alert severity="warning">NON MODIFICABILE DURANTE UN SET ATTIVO: carte, validazione carte e dado.</Alert>}
     </Stack></Paper>}
     {(section==='all'||section==='turn')&&<Paper sx={{ p: 3 }}>

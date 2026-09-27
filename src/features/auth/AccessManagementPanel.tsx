@@ -272,7 +272,7 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
         {singleInputError ? <p className="text-xs font-bold text-white/45">{singleInputError}</p> : null}
         <button type="submit" className="inline-flex items-center justify-center gap-2 rounded bg-white px-3 py-3 font-black text-black disabled:opacity-50" disabled={!canCreate}>
           <KeyRound className="size-4" />
-          {loading ? 'Creazione accountâ€¦' : 'Crea accesso'}
+          {loading ? 'Creazione account…' : 'Crea accesso'}
         </button>
       </form>
 
@@ -351,7 +351,7 @@ export function AccessManagementPanel({ tournament, initialPasswordMode = 'auto'
       ) : null}
       <div className="mt-5 grid gap-3 border-t border-white/10 pt-4">
         <p className="text-xs font-black uppercase tracking-[0.18em] text-white/40">Existing accounts</p>
-        {accountsLoading ? <p className="text-sm font-bold text-white/50">Caricamento accountâ€¦</p> : null}
+        {accountsLoading ? <p className="text-sm font-bold text-white/50">Caricamento account…</p> : null}
         {accountsError ? <p className="rounded border border-red-400/40 bg-red-950/20 p-3 text-sm font-bold text-red-100">{accountsError}</p> : null}
         {!accountsLoading && !accountsError && accounts.length === 0 ? <p className="text-sm font-bold text-white/50">Nessun account di test ancora creato.</p> : null}
         {accounts.map((account) => {

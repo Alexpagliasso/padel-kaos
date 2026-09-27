@@ -48,6 +48,7 @@ export type SupabaseTournamentRow = {
   dice_enabled?: boolean | null
   special_events_enabled?: boolean | null
   default_set_duration_minutes?: number | null
+  default_timed_card_duration_seconds?: number | null
 }
 
 export type SupabaseGroupRow = {
@@ -120,6 +121,9 @@ export type SupabaseMatchRow = {
   games_b: number
   sets_a: number
   sets_b: number
+  game_start_points_a?: string | null
+  game_start_points_b?: string | null
+  gender_handicap_available?: boolean | null
   set_1_started_at?: string | null
   set_1_ended_at?: string | null
   set_2_started_at?: string | null
@@ -284,7 +288,7 @@ export function mapSupabaseTournamentState(dto: SupabaseTournamentStateDto): Tou
     status: mapMatchStatus(match.status),
     score: {
       currentSet: match.current_set,
-      points: { A: '0', B: '0' },
+      points: { A: (match.game_start_points_a ?? '0') as Match['score']['points']['A'], B: (match.game_start_points_b ?? '0') as Match['score']['points']['B'] },
       games: { A: match.games_a, B: match.games_b },
       sets: { A: match.sets_a, B: match.sets_b },
     },
@@ -292,6 +296,7 @@ export function mapSupabaseTournamentState(dto: SupabaseTournamentStateDto): Tou
     activeCardUsageIds: (dto.teamCards ?? [])
       .filter((card) => card.match_id === match.id && (card.status === 'pending' || card.status === 'active'))
       .map((card) => card.id),
+    genderHandicapAvailable: match.gender_handicap_available ?? false,
     set1StartedAt: match.set_1_started_at ?? undefined,
     set1EndedAt: match.set_1_ended_at ?? undefined,
     set2StartedAt: match.set_2_started_at ?? undefined,
@@ -333,6 +338,7 @@ export function mapSupabaseTournamentState(dto: SupabaseTournamentStateDto): Tou
     diceEnabled: dto.tournament.dice_enabled ?? true,
     specialEventsEnabled: dto.tournament.special_events_enabled ?? true,
     defaultSetDurationMinutes: dto.tournament.default_set_duration_minutes ?? 15,
+    defaultTimedCardDurationMinutes: (dto.tournament.default_timed_card_duration_seconds ?? 300) / 60,
     groups: (dto.groups ?? []).map((group) => ({ id: group.id, name: group.name, tournamentId: group.tournament_id ?? dto.tournament.id, sortOrder: group.sort_order, assignedCourtId: group.assigned_court_id ?? null })),
     courts: (dto.courts ?? []).map((court) => ({ id: court.id, name: court.name })),
     rounds: (dto.rounds ?? []).map(round => ({ ...mapRound(round), effectiveSetDurationMinutes: round.set_duration_minutes ?? dto.tournament.default_set_duration_minutes ?? 15 })),
@@ -493,6 +499,7 @@ function mapTournamentEvent(event: SupabaseTournamentEventRow): TournamentEvent 
 function mapGlobalEvent(event: SupabaseGlobalEventRow): GlobalEvent {
   return {
     id: event.id,
+    code: event.type,
     type: mapGlobalEventType(event.type),
     title: event.title,
     description: event.description,

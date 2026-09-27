@@ -184,6 +184,7 @@ export type Match = {
   lineups: MatchLineup[]
   currentKaosEventId?: string
   activeCardUsageIds: string[]
+  genderHandicapAvailable?: boolean
   set1StartedAt?: string
   set1EndedAt?: string
   set2StartedAt?: string
@@ -248,6 +249,7 @@ export type Standing = {
 
 export type GlobalEvent = {
   id: string
+  code?: string
   type: 'prize' | 'challenge' | 'announcement'
   title: string
   description: string
@@ -289,6 +291,7 @@ export type Tournament = {
   diceEnabled?: boolean
   specialEventsEnabled?: boolean
   defaultSetDurationMinutes?: number
+  defaultTimedCardDurationMinutes?: number
   groups: Group[]
   courts: Court[]
   rounds?: Round[]

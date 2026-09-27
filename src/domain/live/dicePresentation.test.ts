@@ -31,4 +31,18 @@ describe('dice presentation lifecycle',()=>{
     expect(openDiceReveal(recent,'court_display',Date.now())).toBeTruthy()
     expect(openDiceReveal(recent,'court_display',Date.now()+7000)).toBeUndefined()
   })
+  it('plays a fresh roll in a new round even when the face is unchanged',()=>{
+    const tournament=rolledTournament(8000)
+    const first=tournament.rounds![0]
+    const firstReveal=openDiceReveal(tournament,'admin',Date.now())!
+    dismissDiceReveal(firstReveal.key)
+    const second={...first,id:'round-2',sequence:first.sequence+1,diceRolledAt:new Date().toISOString()}
+    tournament.rounds!.push(second)
+    const secondReveal=openDiceReveal(tournament,'admin',Date.now())!
+    expect(secondReveal.face.value).toBe(firstReveal.face.value)
+    expect(secondReveal.key).not.toBe(firstReveal.key)
+    expect(openDiceReveal(tournament,'admin',Date.now())?.key).toBe(secondReveal.key)
+    dismissDiceReveal(secondReveal.key)
+    expect(openDiceReveal(tournament,'admin',Date.now())).toBeUndefined()
+  })
 })

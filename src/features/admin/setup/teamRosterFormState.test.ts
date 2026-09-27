@@ -34,8 +34,8 @@ describe('team roster form state', () => {
   })
 
   it.each([
-    [createTeamRosterDraft(team).players.slice(0, 2), 'Exactly 3 players are required.'],
-    [[...createTeamRosterDraft(team).players, createTeamRosterDraft(team).players[0]], 'Exactly 3 players are required.'],
+    [createTeamRosterDraft(team).players.slice(0, 2), 'Sono richiesti esattamente 3 giocatori.'],
+    [[...createTeamRosterDraft(team).players, createTeamRosterDraft(team).players[0]], 'Sono richiesti esattamente 3 giocatori.'],
   ])('rejects a team with an invalid roster size', (players, reason) => {
     expect(validateTeamRosterDraft({ ...createTeamRosterDraft(team), players })).toEqual({ valid: false, reason })
   })
@@ -44,11 +44,11 @@ describe('team roster form state', () => {
     const draft = createTeamRosterDraft(team)
 
     expect(validateTeamRosterDraft({ ...draft, players: [{ ...draft.players[0], firstName: '' }, draft.players[1], draft.players[2]] }))
-      .toEqual({ valid: false, reason: 'Player 1 first name is required.' })
+      .toEqual({ valid: false, reason: 'Giocatore 1: il nome è obbligatorio.' })
     expect(validateTeamRosterDraft({ ...draft, players: [draft.players[0], { ...draft.players[1], lastName: '' }, draft.players[2]] }))
-      .toEqual({ valid: false, reason: 'Player 2 last name is required.' })
+      .toEqual({ valid: false, reason: 'Giocatore 2: il cognome è obbligatorio.' })
     expect(validateTeamRosterDraft({ ...draft, players: [draft.players[0], draft.players[1], { ...draft.players[2], gender: '' }] }))
-      .toEqual({ valid: false, reason: 'Player 3 gender is required.' })
+      .toEqual({ valid: false, reason: 'Giocatore 3: il genere è obbligatorio.' })
   })
 
   it('keeps player ids when editing a roster', () => {
@@ -90,7 +90,7 @@ describe('team roster form state', () => {
 
   it('validates team access username without manual password state', () => {
     expect(validateTeamAccessDraft({ username: 'team_red' })).toBe('')
-    expect(validateTeamAccessDraft({ username: '' })).toBe('Username is required.')
+    expect(validateTeamAccessDraft({ username: '' })).toBe('Il nome utente è obbligatorio.')
   })
 
   it('identifies active and missing team accounts without exposing passwords', () => {
