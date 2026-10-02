@@ -1,0 +1,9 @@
+import {describe,expect,it} from 'vitest'
+import {createDemoTournament} from '../../demo/demoSeed'
+import {getOperationalTimers,OperationalExpiryTracker} from './operationalAudioAlerts'
+
+describe('operational audio expiry transitions',()=>{
+  it('alerts once when a set crosses its canonical deadline',()=>{const t=createDemoTournament();const m=t.matches[0];m.set1StartedAt='2026-10-01T10:00:00Z';m.activeSetDurationMinutes=5;const tracker=new OperationalExpiryTracker();const timers=getOperationalTimers(t);expect(tracker.update(timers,Date.parse('2026-10-01T10:04:59Z'))).toEqual([]);expect(tracker.update(timers,Date.parse('2026-10-01T10:05:00Z')).map(a=>a.kind)).toContain('set');expect(tracker.update(timers,Date.parse('2026-10-01T10:06:00Z'))).toEqual([])})
+  it('alerts once for dice and timed cards across duplicate updates',()=>{const t=createDemoTournament();t.rounds![0].diceEndsAt='2026-10-01T10:05:00Z';const card=t.teamCards[0];card.expiresAt='2026-10-01T10:05:00Z';card.state='active';const definition=t.cards.find(d=>d.id===card.cardId)!;definition.durationType='timed';const tracker=new OperationalExpiryTracker();const timers=getOperationalTimers(t);tracker.update(timers,Date.parse('2026-10-01T10:04:59Z'));expect(tracker.update(timers,Date.parse('2026-10-01T10:05:00Z')).map(a=>a.kind).sort()).toEqual(['card','dice']);expect(tracker.update(getOperationalTimers(t),Date.parse('2026-10-01T10:05:01Z'))).toEqual([])})
+  it('does not alert on initial expired data, future timers or instant cards',()=>{const t=createDemoTournament();const card=t.teamCards[0];card.expiresAt='2026-10-01T09:00:00Z';t.cards.find(d=>d.id===card.cardId)!.durationType='instant';const tracker=new OperationalExpiryTracker();expect(getOperationalTimers(t).some(timer=>timer.kind==='card')).toBe(false);expect(tracker.update(getOperationalTimers(t),Date.parse('2026-10-01T10:00:00Z'))).toEqual([])})
+})

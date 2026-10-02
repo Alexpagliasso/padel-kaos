@@ -9,6 +9,7 @@ import type { WorkspaceEntry } from '../workspace/workspaceStore'
 import { validateCardDraft } from './cardDraftValidation'
 import { validateCardImage } from '../../../domain/cards/cardImage'
 import { removePersistedCardImage, replacePersistedCardImage } from '../../../repositories/cardImagePersistence'
+import { formatTimedCardDuration, timedCardSecondsToMinutes } from '../../../domain/cards/cardDuration'
 
 const emptyDraft: CardDefinitionInput = {
   name: '', slug: '', description: '', longDescription: '', imageUrl: null, effectType: 'custom', targetType: 'own_team',
@@ -34,7 +35,7 @@ export function SupabaseCardLibraryPanel({ entry }: { entry: WorkspaceEntry }) {
     setDraft({
       name: card.name, slug: card.slug, description: card.description, longDescription: card.longDescription ?? card.description, imageUrl: card.imageUrl ?? null,
       effectType: card.effectType, targetType: card.targetType ?? 'own_team', durationType: card.durationType,
-      durationValue: card.durationType === 'timed' || card.durationType === 'games' ? card.durationValue : null,
+      durationValue: card.durationType === 'timed' ? timedCardSecondsToMinutes(card.durationValue) : card.durationType === 'games' ? card.durationValue : null,
       canBeStolen: card.canBeStolen ?? false, enabled: card.enabled,
     })
     setImageFile(null); setLocalError(''); setOpen(true)
@@ -143,7 +144,7 @@ function slugify(value: string) {
 }
 
 function formatDuration(card: CardDefinition) {
-  if (card.durationType === 'timed') return `A tempo · ${card.durationValue} min`
+  if (card.durationType === 'timed') return `A tempo · ${formatTimedCardDuration(card.durationValue)}`
   if (card.durationType === 'games') return `A game · ${card.durationValue}`
   return 'Istantanea'
 }

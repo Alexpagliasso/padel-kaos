@@ -17,7 +17,7 @@ describe('authoritative dice show', () => {
       expect((final.y - face.rotation.y) % 360).toBe(0)
       expect((final.z - face.rotation.z) % 360).toBe(0)
     }
-    expect(getDiceFace({ id: 'wrong', value: 1, productCode: 'no_glass', title: '', description: '', effectType: '', enabled: true }, 1)).toBeUndefined()
+    expect(getDiceFace({ id: 'custom-face', value: 1, productCode: 'no_glass', title: '', description: '', effectType: '', enabled: true }, 1)).toMatchObject({ value: 1, title: 'NO VETRI' })
   })
 
   it('reconstructs a refresh at the current phase and never replays a late join', () => {

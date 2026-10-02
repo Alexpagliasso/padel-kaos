@@ -318,6 +318,38 @@ export async function cleanupTournamentAuthUsers(tournamentId: string) {
   return data
 }
 
+export async function resetTournamentUserPassword(tournamentId: string, userId: string) {
+  const client = requireSupabase()
+  const { data: sessionData, error: sessionError } = await client.auth.getSession()
+  if (sessionError) throw sessionError
+  if (!sessionData.session) throw new Error('Admin session required')
+
+  const { data, error } = await client.functions.invoke<ProvisionedCredential>('provision-tournament-user', {
+    headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+    body: { action: 'reset_password', tournamentId, userId },
+  })
+  if (error) throw new Error(await getFunctionInvokeErrorMessage(error))
+  if (!data?.temporaryPassword) throw new Error('Il servizio non ha restituito la nuova password temporanea.')
+  return data
+}
+
+type TournamentCleanupFailure={phase:'profile_dependencies'|'auth_delete'|'profile_delete';code:string}
+export type TournamentDeletionResult={deleted:number;alreadyMissing:number;failed:number;storageDeleted:number;tournamentDeleted:boolean;failures?:TournamentCleanupFailure[]}
+export async function deleteTournamentPermanently(tournamentId:string,forceActive:boolean){
+  const {data,error}=await requireSupabase().functions.invoke<TournamentDeletionResult>('provision-tournament-user',{
+    body:{action:'delete_tournament',tournamentId,forceActive},
+  })
+  if(error){const diagnostic=await readTournamentDeletionError(error);throw new Error(diagnostic)}
+  if(!data?.tournamentDeleted)throw new Error(`Eliminazione incompleta: ${data?.failed??'alcuni'} account non rimossi. Puoi riprovare in sicurezza.`)
+  return data
+}
+
+async function readTournamentDeletionError(error:{message?:string;context?:unknown}){
+  const response=error.context instanceof Response?error.context:undefined
+  if(response){try{const body=await response.clone().json() as Partial<TournamentDeletionResult>&{error?:string};if(body.failed){const phases=[...new Set(body.failures?.map(item=>item.phase)??[])];const labels=phases.map(phase=>phase==='profile_dependencies'?'dipendenze database':phase==='auth_delete'?'account Auth':'profilo applicativo');return `Pulizia incompleta per ${body.failed} account${labels.length?` (${labels.join(', ')})`:''}. Riprova; se persiste, consulta i Logs della Edge Function.`}if(body.error?.includes('confirmation required'))return 'Il torneo è attivo: conferma esplicitamente la cancellazione.'}catch{/* Response body unavailable: use the safe fallback below. */}}
+  return error.message||'Eliminazione non riuscita. Consulta i Logs della Edge Function.'
+}
+
 export function credentialsToCsv(credentials: ProvisionedCredential[]) {
   const rows = [
     ['role', 'team_name', 'username', 'temporary_password'],

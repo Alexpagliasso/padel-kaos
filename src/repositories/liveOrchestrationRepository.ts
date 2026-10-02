@@ -22,6 +22,10 @@ export function useLiveOrchestrationRepository(tournamentId: string, subscribe =
       .on('postgres_changes',{event:'*',schema:'public',table:'tournament_events',filter:`tournament_id=eq.${tournamentId}`},refresh)
       .on('postgres_changes',{event:'*',schema:'public',table:'match_cards'},refresh)
       .on('postgres_changes',{event:'*',schema:'public',table:'card_usages'},refresh)
+      .on('postgres_changes',{event:'*',schema:'public',table:'round_dice_effects'},refresh)
+      .on('postgres_changes',{event:'*',schema:'public',table:'match_lineups'},refresh)
+      .on('postgres_changes',{event:'*',schema:'public',table:'dice_rules',filter:`tournament_id=eq.${tournamentId}`},refresh)
+      .on('postgres_changes',{event:'*',schema:'public',table:'jolly_copy_targets',filter:`tournament_id=eq.${tournamentId}`},refresh)
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'tournaments',filter:`id=eq.${tournamentId}`},refresh)
       .on('postgres_changes',{event:'*',schema:'public',table:'global_events',filter:`tournament_id=eq.${tournamentId}`},refresh)
       .on('postgres_changes',{event:'*',schema:'public',table:'global_event_winner_reports',filter:`tournament_id=eq.${tournamentId}`},refresh)
@@ -40,14 +44,30 @@ export function useLiveOrchestrationRepository(tournamentId: string, subscribe =
     onSuccess: () => queryClient.invalidateQueries({ queryKey: supabaseTournamentKeys.detail(tournamentId) }),
   })
   const call = (rpc: string, args: Record<string, unknown>) => mutation.mutateAsync({ rpc, args })
+  const confirmSubmittedRoundSet=async(roundId:string,setNumber:1|2)=>{
+    const data=await call('confirm_submitted_round_set',{p_round_id:roundId,p_set_number:setNumber})
+    const rows=Array.isArray(data)?data:[]
+    const transitioned=rows.length>0&&rows.every(row=>{const value=row as {status?:string;current_set?:number};return setNumber===1?value.status==='set_break'&&value.current_set===2:['super_tiebreak','completed'].includes(value.status??'')})
+    if(!transitioned)throw new Error(`La conferma del Set ${setNumber} non ha prodotto la transizione attesa.`)
+    return data
+  }
+  const startReadySet2=async(roundId:string)=>{
+    const data=await call('control_round_set',{p_round_id:roundId,p_action:'start_set_2'})
+    const rows=Array.isArray(data)?data:[]
+    const transitioned=rows.length>0&&rows.every(row=>{const value=row as {status?:string;current_set?:number;set_2_started_at?:string|null};return value.status==='set_2'&&value.current_set===2&&Boolean(value.set_2_started_at)})
+    if(!transitioned)throw new Error('La transizione al Set 2 non è stata completata. Riprova o verifica lo stato del turno.')
+    return data
+  }
   return {
     isPending: mutation.isPending,
     error: mutation.error instanceof Error ? mutation.error.message : '',
     setMode: (mode: SetControlMode) => call('set_tournament_set_control_mode', { p_tournament_id: tournamentId, p_mode: mode }),
     assignCards: (roundId: string, count: number, redraw = false) => call('assign_round_cards', { p_round_id: roundId, p_cards_per_team: count, p_redraw: redraw }),
     openRound: (roundId: string) => call('open_round_for_referees', { p_round_id: roundId }),
-    generateMissingLineups: (roundId: string) => call('generate_missing_round_lineups', { p_round_id: roundId }),
+    generateMissingLineups: (roundId: string,setNumber:1|2) => call('generate_missing_round_lineups_for_set', { p_round_id: roundId,p_set_number:setNumber }),
     rollGlobalDice: (roundId: string) => call('roll_global_dice_for_round', { p_round_id: roundId }),
+    setRoundDiceEffects: (roundId:string,ruleIds:string[])=>call('set_round_dice_effects',{p_round_id:roundId,p_enabled_rule_ids:ruleIds}),
+    setJollyCopyTargets: (cardDefinitionIds:string[])=>call('set_jolly_copy_targets',{p_tournament_id:tournamentId,p_card_definition_ids:cardDefinitionIds}),
     setCompletedSetResult: (matchId: string, setNumber: 1 | 2, gamesA: number, gamesB: number) => call('set_completed_match_set_result', { p_match_id: matchId, p_set_number: setNumber, p_games_a: gamesA, p_games_b: gamesB }),
     correctMatchResult: (matchId: string, setNumber: 1 | 2 | 3, scoreA: number, scoreB: number) => call('admin_correct_match_result', { p_match_id: matchId, p_set_number: setNumber, p_score_a: scoreA, p_score_b: scoreB }),
     confirmMatchResult: (matchId: string) => call('confirm_match_final_result', { p_match_id: matchId }),
@@ -62,11 +82,15 @@ export function useLiveOrchestrationRepository(tournamentId: string, subscribe =
     activateSpecialEvent: (prize: string) => call('activate_por_tres_for_tournament',{p_tournament_id:tournamentId,p_prize:prize}),
     resolveEventWinnerReport: (reportId: string) => call('resolve_global_event_winner_report',{p_report_id:reportId}),
     controlRound: (roundId: string, action: SetAction) => call('control_round_set', { p_round_id: roundId, p_action: action }),
+    confirmSubmittedRoundSet,
+    startReadySet2,
     controlRefereeMatch: (matchId: string, action: SetAction) => call('control_referee_match_set', { p_match_id: matchId, p_action: action }),
   }
 }
 
 export function mapLiveError(message: string) {
+  if (message.includes('round is still in set 1')) return 'Il turno è ancora nel primo set: attendi risultati validi da tutti i campi.'
+  if (message.includes('round is still in set 2')) return 'Il turno è ancora nel secondo set: attendi risultati validi da tutti i campi.'
   if (message.includes('invalid input syntax for type uuid')) return 'Correzione non riuscita per un errore nei dati. Contatta la Regia tecnica.'
   if (message.includes('authoritative dice faces are not configured')) return 'Le sei facce del dado non sono configurate per questo torneo. Contatta la Regia tecnica.'
   if (message.includes('invalid corrected result')) return 'Inserisci punteggi validi e diversi per la correzione.'

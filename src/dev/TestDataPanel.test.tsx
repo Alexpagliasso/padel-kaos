@@ -33,7 +33,7 @@ describe('Admin development tools', () => {
   it('mounts TEST DATA before SUMMARY inside Tournament Setup outside Vite DEV', async () => {
     vi.stubEnv('DEV', false)
     render(<AuthContext.Provider value={admin}><TournamentSetupPage initialSection="TEST DATA" /></AuthContext.Provider>)
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['GENERALE', 'SQUADRE', 'GIRONI', 'CARTE', 'EVENTI SPECIALI', 'DATI DI TEST', 'RIEPILOGO'])
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['GENERALE', 'SQUADRE', 'GIRONI', 'CARTE', 'DADO', 'EVENTI SPECIALI', 'DATI DI TEST', 'RIEPILOGO'])
     expect(await screen.findByRole('button', { name: 'GENERATE TEST TEAMS' })).toBeTruthy()
   })
   it('keeps the card visible without a selected tournament', async () => {

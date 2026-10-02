@@ -66,6 +66,11 @@ describe('card rules', () => {
     })
   })
 
+  it('expires a 300-second timed card after 5 minutes', () => {
+    expect(createTimedCardWindow(new Date('2026-09-03T10:00:00.000Z'), 300).expiresAt)
+      .toBe('2026-09-03T10:05:00.000Z')
+  })
+
   it('decrements game duration cards and expires at zero', () => {
     expect(decrementGameDurationCard({ ...teamCard('tc', 'team-a', 'active'), remainingGames: 1 })).toMatchObject({
       remainingGames: 0,

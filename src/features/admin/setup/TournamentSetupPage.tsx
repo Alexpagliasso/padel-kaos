@@ -12,10 +12,11 @@ import { TournamentSetupContent } from './TournamentSetup'
 import { isSupabaseProvider } from '../../../repositories'
 import { TournamentStructurePreview } from './TournamentStructurePreview'
 import { GroupSetup } from './GroupSetup'
+import { DiceLibraryPanel } from './DiceLibraryPanel'
 
-export type SetupSection = 'GENERAL' | 'TEAMS' | 'GROUPS' | 'CARDS' | 'SPECIAL EVENTS' | 'SUMMARY' | 'TEST DATA'
-const sections: SetupSection[] = ['GENERAL', 'TEAMS', 'GROUPS', 'CARDS', 'SPECIAL EVENTS', 'TEST DATA', 'SUMMARY']
-const sectionLabels: Record<SetupSection, string> = { GENERAL: 'GENERALE', TEAMS: 'SQUADRE', GROUPS: 'GIRONI', CARDS: 'CARTE', 'SPECIAL EVENTS': 'EVENTI SPECIALI', 'TEST DATA': 'DATI DI TEST', SUMMARY: 'RIEPILOGO' }
+export type SetupSection = 'GENERAL' | 'TEAMS' | 'GROUPS' | 'CARDS' | 'DICE' | 'SPECIAL EVENTS' | 'SUMMARY' | 'TEST DATA'
+const sections: SetupSection[] = ['GENERAL', 'TEAMS', 'GROUPS', 'CARDS', 'DICE', 'SPECIAL EVENTS', 'TEST DATA', 'SUMMARY']
+const sectionLabels: Record<SetupSection, string> = { GENERAL: 'GENERALE', TEAMS: 'SQUADRE', GROUPS: 'GIRONI', CARDS: 'CARTE', DICE: 'DADO', 'SPECIAL EVENTS': 'EVENTI SPECIALI', 'TEST DATA': 'DATI DI TEST', SUMMARY: 'RIEPILOGO' }
 export function TournamentSetupPage({ initialSection = 'GENERAL' }: { initialSection?: SetupSection }) {
   const auth = useContext(AuthContext)
   const showDev = auth?.status === 'authenticated' && auth.profile?.role === 'admin'
@@ -34,6 +35,7 @@ export function TournamentSetupPage({ initialSection = 'GENERAL' }: { initialSec
       {section === 'TEST DATA' && showDev && <Suspense fallback={<Typography>Caricamento strumenti di sviluppo…</Typography>}><TestDataPanel key={tournament.id} /></Suspense>}
       {section === 'GENERAL' && <GeneralSetup key={tournament.id} entry={entry} persisted={workspace.remote} onSave={workspace.saveTournamentConfig} />}
       {section === 'TEAMS' && <TournamentSetupContent key={tournament.id} tournament={tournament} initialTab="TEAMS" embedded enableTeamAccess={!entry.local && isSupabaseProvider()} repositoryOverride={entry.local ? { createTeam: input => state.saveTeam(entry, input), updateTeam: (id, input) => state.saveTeam(entry, input, id), setTeamRanking: (_tournamentId, teamId, ranking) => state.setTeamRanking(entry, teamId, ranking), assignRandomTeamRankings: () => state.assignRandomTeamRankings(entry) } : undefined} />}
+      {section === 'DICE' && <DiceLibraryPanel key={tournament.id} entry={entry} />}
       {(section === 'CARDS' || section === 'SPECIAL EVENTS') && <LibraryPanel key={`${tournament.id}-${section}`} entry={entry} kind={section === 'CARDS' ? 'cards' : 'events'} />}
       {section === 'SUMMARY' && <Paper sx={{ p: { xs: 2, md: 4 } }}>
         <Typography variant="h2" sx={{ mb: 3 }}>Pronti per il primo servizio?</Typography>
@@ -42,7 +44,7 @@ export function TournamentSetupPage({ initialSection = 'GENERAL' }: { initialSec
         </Box>
         {tournament.teams.length !== entry.config.teamsCount && <Alert severity="warning" sx={{ mb: 3 }}>Le squadre iscritte non corrispondono al numero previsto. L’avvio qui mostra il ciclo del torneo senza generare il calendario.</Alert>}
         <TournamentStructurePreview config={entry.config} />
-        <Divider sx={{ my: 3 }} /><TournamentLifecycle entry={entry} onDelete={workspace.remote ? workspace.deleteTournamentIfSafe : undefined} />
+        <Divider sx={{ my: 3 }} /><TournamentLifecycle entry={entry} onDelete={workspace.remote ? workspace.deleteWorkspaceTournament : undefined} />
       </Paper>}
     </Box>
   </PageShell>

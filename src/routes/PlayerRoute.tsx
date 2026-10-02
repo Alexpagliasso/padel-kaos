@@ -1,5 +1,5 @@
 import { canPreviewAsAdmin } from '../features/admin/preview/previewPolicy'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { RoleShell } from '../shared/components/RoleShell'
 import { useRoleTournament as useTournament } from '../features/admin/preview/useRoleTournament'
 import { useDemoStore } from '../demo/demoStore'
@@ -24,6 +24,8 @@ export function PlayerRoute() {
   const selectTeam = useDemoStore(state => state.selectTeam)
   const playCard = useDemoStore(state => state.playCard)
   const liveMatch = useLiveMatchRepository(tournament.id)
+  const expiringCards=useRef(new Set<string>())
+  useEffect(()=>{const expired=tournament.teamCards.filter(card=>card.state==='active'&&card.expiresAt&&Date.parse(card.expiresAt)<=Date.now()&&!expiringCards.current.has(card.id));expired.forEach(card=>{expiringCards.current.add(card.id);void liveMatch.expireCard(card.id).catch(()=>expiringCards.current.delete(card.id))})},[tournament.teamCards,liveMatch])
   const logoutAction = profile?.role === 'team' ? <LogoutButton minimal /> : undefined
   const routeState = resolvePlayerRouteState({
     provider: adminPreview ? 'demo' : dataProvider,
@@ -37,10 +39,10 @@ export function PlayerRoute() {
   if (routeState.type === 'loading') return <RoleShell action={logoutAction}><main className="mx-auto grid min-h-[70svh] max-w-5xl place-items-center px-4 text-center"><p className="text-sm font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">Caricamento area giocatore</p></main></RoleShell>
   if (routeState.type === 'error') return <RoleShell action={logoutAction}><main className="mx-auto grid min-h-[70svh] max-w-5xl place-items-center px-4 text-center"><section className="max-w-xl rounded border border-white/10 bg-[#171717] p-6"><p className="text-sm font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">Area giocatore non disponibile</p><h1 className="mt-3 text-3xl font-black">{routeState.title}</h1><p className="mt-3 text-white/60">{routeState.message}</p></section></main></RoleShell>
 
-  return <PlayerRouteContent tournament={tournament} events={events} routeState={routeState} onSelectDemoTeam={selectTeam} onPlayDemoCard={async teamCardId => {
+  return <PlayerRouteContent tournament={tournament} events={events} routeState={routeState} onSelectDemoTeam={selectTeam} onPlayDemoCard={async (teamCardId,resolvedCardDefinitionId) => {
     if (adminPreview && dataProvider === 'supabase') return 'Anteprima Admin in sola lettura'
     if (dataProvider === 'demo') return playCard(teamCardId).message
-    await liveMatch.requestCard(teamCardId)
+    await liveMatch.requestCard(teamCardId,resolvedCardDefinitionId)
     const played=tournament.teamCards.find(card=>card.id===teamCardId)
     const definition=tournament.cards.find(card=>card.id===played?.cardId)
     const requiresValidation=tournament.refereeCanValidateCards!==false||definition?.slug==='il-prescelto'||definition?.name.toLocaleLowerCase('it')==='il prescelto'
@@ -53,7 +55,7 @@ export function PlayerRouteContent({ tournament, events, routeState, onSelectDem
   events: DemoEvent[]
   routeState: Extract<PlayerRouteState, { type: 'ready' }>
   onSelectDemoTeam: (teamId: string) => void
-  onPlayDemoCard: (teamCardId: string) => string | Promise<string>
+  onPlayDemoCard: (teamCardId: string, resolvedCardDefinitionId?: string) => string | Promise<string>
   headerAction?: ReactNode
 }) {
   return <TeamMobileApp tournament={tournament} events={events} routeState={routeState} onSelectDemoTeam={onSelectDemoTeam} onPlayDemoCard={onPlayDemoCard} headerAction={headerAction} />

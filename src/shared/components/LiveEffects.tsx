@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { CreditCard, Dices } from 'lucide-react'
 import type { Match, Tournament } from '../types/domain'
 import { formatCountdown, getDiceEffect } from '../../domain/live/readiness'
@@ -15,12 +15,14 @@ type CardNotice = { eventId:string;matchId:string;matchCardId:string;teamId:stri
 export function CardPlayNotification({tournament,audience='team',matchIds,excludeTeamId,enabled=true}:{tournament:Tournament;audience?:DiceAudience;matchIds?:string[];excludeTeamId?:string;enabled?:boolean}) {
   const [queue,setQueue]=useState<CardNotice[]>([])
   const [visible,setVisible]=useState(false)
+  const reducedMotion=useReducedMotion()
   const initialized=useRef(false)
   const now=useSharedClock()
   const [,forceRefresh]=useState(0)
   useEffect(()=>{const update=()=>forceRefresh(value=>value+1);window.addEventListener(DICE_DISMISSED_EVENT,update);window.addEventListener(SPECIAL_EVENT_DISMISSED_EVENT,update);return()=>{window.removeEventListener(DICE_DISMISSED_EVENT,update);window.removeEventListener(SPECIAL_EVENT_DISMISSED_EVENT,update)}},[])
   const scope=useMemo(()=>new Set(matchIds??[]),[matchIds])
-  const events=useMemo(()=>tournament.matchEvents.filter(event=>event.type==='CARD_PLAYED'&&(!scope.size||scope.has(event.matchId))&&event.payload.team_id!==excludeTeamId),[excludeTeamId,scope,tournament.matchEvents])
+  const publicActivation=audience==='team'&&Boolean(excludeTeamId)
+  const events=useMemo(()=>tournament.matchEvents.filter(event=>event.type===(publicActivation?'CARD_ACTIVATED':'CARD_PLAYED')&&(!scope.size||scope.has(event.matchId))&&event.payload.team_id!==excludeTeamId),[excludeTeamId,publicActivation,scope,tournament.matchEvents])
   const diceRevealActive=Boolean(openDiceReveal(tournament,audience,now)||openSpecialEventReveal(tournament,audience,now))
   useEffect(()=>{
     const eventKeys=events.map(event=>`padel-kaos:card-play:${event.id}`)
@@ -29,9 +31,9 @@ export function CardPlayNotification({tournament,audience='team',matchIds,exclud
     const unseen=events.filter(item=>sessionStorage.getItem(`padel-kaos:card-play:${item.id}`)!=='seen')
     if(!unseen.length)return
     eventKeys.forEach(key=>sessionStorage.setItem(key,'seen'))
-    const notices=unseen.map(event=>({eventId:event.id,matchId:event.matchId,matchCardId:typeof event.payload.match_card_id==='string'?event.payload.match_card_id:'',teamId:typeof event.payload.team_id==='string'?event.payload.team_id:'',cardDefinitionId:typeof event.payload.card_definition_id==='string'?event.payload.card_definition_id:'',requiresValidation:event.payload.requires_referee_validation===true})).filter(item=>item.matchCardId&&item.teamId&&item.cardDefinitionId)
+    const notices=unseen.map(event=>{const matchCardId=typeof event.payload.match_card_id==='string'?event.payload.match_card_id:'';const card=tournament.teamCards.find(item=>item.id===matchCardId);return {eventId:event.id,matchId:event.matchId,matchCardId,teamId:typeof event.payload.team_id==='string'?event.payload.team_id:'',cardDefinitionId:typeof event.payload.resolved_card_definition_id==='string'?event.payload.resolved_card_definition_id:typeof event.payload.card_definition_id==='string'?event.payload.card_definition_id:card?.resolvedCardDefinitionId??card?.cardId??'',requiresValidation:event.payload.requires_referee_validation===true}}).filter(item=>item.matchCardId&&item.teamId&&item.cardDefinitionId)
     if(notices.length)queueMicrotask(()=>setQueue(current=>[...current,...notices.filter(notice=>!current.some(item=>item.eventId===notice.eventId))]))
-  },[enabled,events])
+  },[enabled,events,tournament.teamCards])
   const queued=queue[0]
   const queuedCard=queued?tournament.teamCards.find(card=>card.id===queued.matchCardId):undefined
   const queuedMatch=queued?tournament.matches.find(match=>match.id===queued.matchId):undefined
@@ -40,15 +42,17 @@ export function CardPlayNotification({tournament,audience='team',matchIds,exclud
   useEffect(()=>{
     if(!queued||diceRevealActive||!enabled)return
     const showTimer=window.setTimeout(()=>setVisible(true),0)
-    const timer=window.setTimeout(()=>{setVisible(false);setQueue(current=>current.slice(1))},cardNoticeMs)
+    const timer=window.setTimeout(()=>{setVisible(false);setQueue(current=>current.slice(1))},audience==='court_display'||audience==='main_display'||audience==='team'?12000:cardNoticeMs)
     return()=>{window.clearTimeout(showTimer);window.clearTimeout(timer)}
-  },[diceRevealActive,enabled,queued])
+  },[audience,diceRevealActive,enabled,queued])
   if(!visible||!queued||diceRevealActive)return null
   const match=tournament.matches.find(item=>item.id===queued.matchId)
   const court=tournament.courts.find(item=>item.id===match?.courtId)
   const team=tournament.teams.find(item=>item.id===queued.teamId)
   const definition=tournament.cards.find(item=>item.id===queued.cardDefinitionId)
-  return <AnimatePresence><motion.aside role="status" aria-live="assertive" className="fixed inset-x-3 top-3 z-[2300] mx-auto max-w-2xl rounded-2xl border border-amber-300/60 bg-[#17120a]/95 p-5 text-center text-white shadow-2xl backdrop-blur" initial={{opacity:0,y:-24}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-20}}><CreditCard className="mx-auto size-8 text-amber-200"/><p className="mt-2 text-xs font-black uppercase tracking-[.2em] text-amber-200">CARTA GIOCATA</p>{court&&<p className="mt-1 text-sm font-black uppercase text-white/55">{court.name}</p>}<h2 className="mt-2 text-2xl font-black uppercase">{team?.name??'Squadra'}</h2><p className="text-xl font-black">{definition?.name??'Carta'}</p><p className="mt-2 font-bold text-white/70">{queued.requiresValidation?'IN ATTESA DELL’ARBITRO':'CARTA ATTIVA'}</p></motion.aside></AnimatePresence>
+  const cinematic=audience==='team'||audience==='court_display'||audience==='main_display'
+  const dismiss=()=>{setVisible(false);setQueue(current=>current.slice(1))}
+  return <AnimatePresence><motion.aside role="status" aria-live="assertive" data-card-cinematic={cinematic||undefined} className={cinematic?'fixed inset-0 z-[2300] grid place-items-center overflow-hidden bg-black/95 p-6 text-center text-white':'fixed inset-x-3 top-3 z-[2300] mx-auto max-w-2xl rounded-2xl border border-amber-300/60 bg-[#17120a]/95 p-5 text-center text-white shadow-2xl backdrop-blur'} initial={{opacity:0,scale:reducedMotion?1:.88}} animate={{opacity:1,scale:1}} exit={{opacity:0,scale:reducedMotion?1:1.04}} transition={{duration:reducedMotion?0:.28}}><div className={cinematic?'relative w-full max-w-xl rounded-[32px] border border-red-400/50 bg-gradient-to-b from-red-950/80 via-[#17120a] to-black p-7 shadow-[0_0_100px_rgba(239,68,68,.25)]':''}>{definition?.imageUrl?<img src={definition.imageUrl} alt="" className="mx-auto mb-5 max-h-[42svh] w-full object-contain"/>:<CreditCard className="mx-auto size-16 text-amber-200"/>}<p className="mt-2 text-xs font-black uppercase tracking-[.2em] text-amber-200">{audience==='team'&&excludeTeamId?'CARTA AVVERSARIA':'CARTA GIOCATA'}</p>{court&&<p className="mt-1 text-sm font-black uppercase text-white/55">{court.name}</p>}<h2 className="mt-2 text-2xl font-black uppercase">{team?.name??'Squadra'}</h2><p className="text-3xl font-black">{definition?.name??'Carta'}</p><p className="mt-2 font-bold text-white/70">{definition?.description}</p><p className="mt-2 font-bold text-white/70">{queued.requiresValidation?'IN ATTESA DELL’ARBITRO':'CARTA ATTIVA'}</p>{audience==='team'&&<button type="button" onClick={dismiss} className="mt-7 min-h-12 rounded-xl bg-white px-7 font-black text-black">CONTINUA</button>}</div></motion.aside></AnimatePresence>
 }
 
 export function ActiveDiceIndicator({ tournament, match }: { tournament: Tournament; match: Match }) {

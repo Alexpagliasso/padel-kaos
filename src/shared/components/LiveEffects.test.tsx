@@ -24,8 +24,8 @@ describe('GlobalDiceReveal',()=>{
     const rule=tournament.diceRules[0]
     round.diceResult=rule.value;round.diceRuleId=rule.id;round.diceRolledAt=new Date().toISOString()
     render(<QueryClientProvider client={new QueryClient()}><GlobalDiceReveal tournament={tournament} audience="team"/></QueryClientProvider>)
-    expect(screen.getByRole('heading',{name:'1 VS 1',level:2})).toBeTruthy()
-    expect(screen.getByAltText('Illustrazione 1 VS 1')).toBeTruthy()
+    expect(screen.getByRole('heading',{name:rule.title,level:2})).toBeTruthy()
+    expect(screen.getByAltText(`Illustrazione ${rule.title}`)).toBeTruthy()
   })
   it('requires local CONTINUA after the readable phase',()=>{
     sessionStorage.clear()

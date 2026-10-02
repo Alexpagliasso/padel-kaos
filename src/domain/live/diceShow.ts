@@ -21,8 +21,11 @@ export const diceFaces: readonly DiceFace[] = [
 
 export function getDiceFace(rule: DiceRule | undefined, result: number | undefined): DiceFace | undefined {
   if (!rule || !result) return undefined
-  const face = diceFaces.find(item => item.value === result)
-  return face && (!rule.productCode || rule.productCode === face.productCode) ? face : undefined
+  const resultFace = diceFaces.find(item => item.value === result)
+  const contentFallback = diceFaces.find(item => item.productCode === rule.productCode) ?? resultFace
+  if (!resultFace || !contentFallback) return undefined
+  if (resultFace === contentFallback && rule.title === contentFallback.title && !rule.description && !rule.imageUrl) return contentFallback
+  return { ...resultFace, productCode: rule.productCode ?? contentFallback.productCode, title: rule.title || contentFallback.title, shortDescription: rule.description || contentFallback.shortDescription, artwork: rule.imageUrl || contentFallback.artwork }
 }
 export function getLatestDiceReveal(tournament: Tournament): { round: Round; face: DiceFace; rolledAt: number } | undefined {
   const rounds = [...(tournament.rounds ?? [])].filter(round => round.diceRolledAt && round.diceResult && round.diceRuleId)

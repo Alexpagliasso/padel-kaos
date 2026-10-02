@@ -189,7 +189,7 @@ async function loadTournamentState(
   client: ReturnType<typeof requireSupabase>,
   tournament: SupabaseTournamentRow,
 ) {
-  const [groups, courts, rounds, teams, players, matches, lineups, cards, teamCards, diceRules, matchEvents, tournamentEvents, globalEvents, eventWinnerReports] = await Promise.all([
+  const [groups, courts, rounds, teams, players, matches, lineups, cards, teamCards, diceRules, matchEvents, tournamentEvents, globalEvents, eventWinnerReports,roundDiceEffects,jollyCopyTargets] = await Promise.all([
     selectTournamentRows<SupabaseGroupRow>(client, 'groups', 'id,tournament_id,name,sort_order,assigned_court_id', tournament.id, 'sort_order'),
     selectTournamentRows<SupabaseCourtRow>(client, 'courts', 'id,name,sort_order', tournament.id, 'sort_order'),
     selectTournamentRows<SupabaseRoundRow>(client, 'rounds', 'id,tournament_id,name,stage,sequence,status,dice_result,dice_rule_id,dice_started_at,dice_ends_at,dice_rolled_at,opened_at,set_duration_minutes,completion_total_matches,completion_completed_matches,completion_ready,completion_blockers,cards_per_team,card_total_teams,card_ready_teams,card_readiness_ready,card_readiness_blockers', tournament.id, 'sequence'),
@@ -198,15 +198,19 @@ async function loadTournamentState(
     selectTournamentRows<SupabaseMatchRow>(client, 'matches', 'id,round_id,group_id,court_id,team_a_id,team_b_id,status,current_set,games_a,games_b,sets_a,sets_b,game_start_points_a,game_start_points_b,gender_handicap_available,super_tiebreak_team_a,super_tiebreak_team_b,set_1_started_at,set_1_ended_at,set_2_started_at,set_2_ended_at,completed_at,result_confirmed_at,result_confirmed_by,active_set_duration_minutes,set_1_result_submitted_at,set_2_result_submitted_at', tournament.id, 'created_at'),
     selectMatchScopedRows<SupabaseMatchLineupRow>(client, 'match_lineups', 'match_id,team_id,set_number,active_player_1_id,active_player_2_id,bench_player_id,confirmed_at', tournament.id),
     selectCardDefinitions(client, tournament.id),
-    selectMatchScopedRows<SupabaseMatchCardRow>(client, 'match_cards', 'id,match_id,team_id,card_definition_id,status,used_in_set,activated_at,expires_at,remaining_games,stolen_from_team_id', tournament.id),
-    selectTournamentRows<SupabaseDiceRuleRow>(client, 'dice_rules', 'id,dice_value,title,description,effect_type,duration_seconds,enabled,product_code', tournament.id, 'dice_value'),
+    selectMatchScopedRows<SupabaseMatchCardRow>(client, 'match_cards', 'id,match_id,team_id,card_definition_id,status,used_in_set,activated_at,expires_at,remaining_games,stolen_from_team_id,resolved_card_definition_id,resolved_from_match_card_id', tournament.id),
+    selectTournamentRows<SupabaseDiceRuleRow>(client, 'dice_rules', 'id,dice_value,title,description,long_description,image_url,effect_type,duration_seconds,enabled,product_code', tournament.id, 'dice_value'),
     selectTournamentRows<SupabaseMatchEventRow>(client, 'match_events', 'id,match_id,type,payload,actor_user_id,created_at', tournament.id, 'created_at'),
     selectTournamentRows<SupabaseTournamentEventRow>(client, 'tournament_events', 'id,round_id,type,payload,actor_user_id,created_at', tournament.id, 'created_at'),
     selectTournamentRows<SupabaseGlobalEventRow>(client, 'global_events', 'id,type,title,description,prize,status,started_at,completed_at,winner_player_id,winner_team_id', tournament.id, 'created_at'),
     selectTournamentRows<SupabaseEventWinnerReportRow>(client, 'global_event_winner_reports', 'id,global_event_id,match_id,player_id,team_id,status,created_at', tournament.id, 'created_at'),
+    selectReadableRows<{round_id:string;dice_rule_id:string;enabled:boolean}>(client,'round_dice_effects','round_id,dice_rule_id,enabled'),
+    selectTournamentRows<{tournament_id:string;card_definition_id:string;enabled:boolean}>(client,'jolly_copy_targets','tournament_id,card_definition_id,enabled',tournament.id),
   ])
-  return mapSupabaseTournamentState({ tournament, groups, courts, rounds, teams, players, matches, lineups, cards, teamCards, diceRules, matchEvents, tournamentEvents, globalEvents, eventWinnerReports })
+  return mapSupabaseTournamentState({ tournament, groups, courts, rounds, teams, players, matches, lineups, cards, teamCards, diceRules, matchEvents, tournamentEvents, globalEvents, eventWinnerReports,roundDiceEffects,jollyCopyTargets })
 }
+
+async function selectReadableRows<T>(client:ReturnType<typeof requireSupabase>,table:string,columns:string){const {data,error}=await client.from(table).select(columns);if(error)throw new Error(`Unable to load ${table}: ${error.message}`);return (data??[]) as T[]}
 
 async function selectTournamentRows<T>(
   client: ReturnType<typeof requireSupabase>,

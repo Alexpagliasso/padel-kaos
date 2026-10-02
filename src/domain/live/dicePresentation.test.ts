@@ -17,7 +17,7 @@ describe('dice presentation lifecycle',()=>{
   it('keeps an entered interactive reveal open until local dismissal, including refresh',()=>{
     const tournament=rolledTournament(6000)
     const entry=openDiceReveal(tournament,'admin',Date.now())!
-    expect(entry.face.title).toBe('1 VS 1')
+    expect(entry.face.title).toBe(tournament.diceRules[0].title)
     expect(openDiceReveal(tournament,'admin',Date.now()+20000)).toBeTruthy()
     dismissDiceReveal(entry.key)
     expect(openDiceReveal(tournament,'admin',Date.now())).toBeUndefined()

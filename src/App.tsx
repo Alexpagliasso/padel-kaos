@@ -1,7 +1,6 @@
 import { TournamentSetupPage } from './features/admin/setup/TournamentSetupPage'
 import { AdminRolePreviewRoute, DevelopmentBackToAdmin } from './features/admin/preview/DevelopmentPreview'
 import { Route, Routes } from 'react-router-dom'
-import { AdminRoute } from './routes/AdminRoute'
 import { CourtDisplayRoute } from './routes/CourtDisplayRoute'
 import { HomeRoute } from './routes/HomeRoute'
 import { MainDisplayRoute } from './routes/MainDisplayRoute'
@@ -18,6 +17,9 @@ import { AdminRecovery } from './features/admin/recovery/AdminRecovery'
 import { AdminCalendar } from './features/admin/calendar/AdminCalendar'
 import { AdminStandings } from './features/admin/standings/AdminStandings'
 import { AdminResults } from './features/admin/results/AdminResults'
+import { TournamentManagement } from './features/admin/tournaments/TournamentManagement'
+import { NewTournamentWizard } from './features/admin/tournaments/NewTournamentWizard'
+import { AdminDefaultCatalog } from './features/admin/library/AdminDefaultCatalog'
 
 function App() {
   return (
@@ -27,7 +29,9 @@ function App() {
       <Route path="/" element={<HomeRoute />} />
       <Route path="/login" element={<LoginRoute />} />
       <Route path="/admin" element={<ProtectedRoute allowedRoles={getAllowedRolesForRoute('admin')}><AdminLayout /></ProtectedRoute>}>
-        <Route index element={<AdminRoute />} />
+        <Route index element={<TournamentManagement />} />
+        <Route path="library" element={<AdminDefaultCatalog />} />
+        <Route path="new" element={<NewTournamentWizard />} />
         <Route path="setup" element={<TournamentSetupPage />} />
         <Route path="teams" element={<TournamentSetupPage key="teams" initialSection="TEAMS" />} />
         <Route path="groups" element={<TournamentSetupPage key="groups" initialSection="GROUPS" />} />
@@ -38,6 +42,7 @@ function App() {
         <Route path="control-room" element={<ControlRoom />} />
         <Route path="access" element={<AdminAccess />} />
         <Route path="recovery" element={<AdminRecovery />} />
+        <Route path="tournaments" element={<TournamentManagement />} />
       </Route>
       <Route path="/player/access/:token" element={<PlayerRoute />} />
       <Route path="/player/*" element={<AdminRolePreviewRoute allowedRoles={getAllowedRolesForRoute('player')}><PlayerRoute /></AdminRolePreviewRoute>} />

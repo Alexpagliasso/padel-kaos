@@ -6,6 +6,7 @@ import { useWorkspaceStore, type LibraryCard, type WorkspaceEntry } from '../wor
 import { isSupabaseProvider } from '../../../repositories'
 import { demoCardImageRepository } from '../../../repositories/demo/demoCardImageRepository'
 import { SupabaseCardLibraryPanel } from './SupabaseCardLibraryPanel'
+import { timedCardSecondsToMinutes } from '../../../domain/cards/cardDuration'
 
 export function LibraryPanel({ entry, kind }: { entry: WorkspaceEntry; kind: 'cards' | 'events' }) {
   if (kind === 'cards' && isSupabaseProvider() && !entry.local) return <SupabaseCardLibraryPanel entry={entry} />
@@ -31,7 +32,7 @@ function DemoLibraryPanel({ entry, kind }: { entry: WorkspaceEntry; kind: 'cards
     id: card.id, title: card.name, description: card.description, longDescription: card.longDescription ?? card.description,
     imageUrl: card.imageUrl ?? '', canBeStolen: card.canBeStolen ?? false,
     durationType: card.durationType === 'timed' || card.durationType === 'games' ? card.durationType : 'instant',
-    durationValue: card.durationType === 'timed' || card.durationType === 'games' ? card.durationValue : null, active: card.enabled,
+    durationValue: card.durationType === 'timed' ? timedCardSecondsToMinutes(card.durationValue) : card.durationType === 'games' ? card.durationValue : null, active: card.enabled,
   }))]
   const activeIds = cards ? entry.activeCards : entry.activeEvents
   const invalidDuration = (durationType === 'timed' || durationType === 'games') && (!durationValue || durationValue < 1 || !Number.isInteger(durationValue))

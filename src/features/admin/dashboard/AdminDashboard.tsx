@@ -1,7 +1,7 @@
 import { Paper, Typography } from '@mui/material'
 import { PageShell } from '../../../shared/components/Foundation'
 import { Link } from 'react-router-dom'
-import { CalendarPlus, KeyRound, Layers3, ShieldCheck, Trophy, Wrench } from 'lucide-react'
+import { CalendarPlus, KeyRound, Layers3, ShieldCheck, Trash2, Wrench } from 'lucide-react'
 import { useAdminWorkspace } from '../workspace/useAdminWorkspace'
 import type { Round } from '../../../shared/types/domain'
 import { getCurrentRound } from './dashboardState'
@@ -14,8 +14,8 @@ export function AdminDashboard() {
   if (error) return <AdminPageState title="Impossibile caricare il torneo" detail={error} tone="error" />
 
   return (
-    <PageShell><div className="grid gap-6">
-      <Paper component="section" sx={{ p: { xs: 3, md: 5 }, background: 'var(--event-gradient)' }}>
+    <PageShell><div className="grid gap-4">
+      <Paper component="section" sx={{ p: { xs: 3, md: 4 }, background: 'var(--event-gradient)' }}>
         <p className="text-sm font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">Panoramica Admin</p>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -26,18 +26,13 @@ export function AdminDashboard() {
         </div>
       </Paper>
 
-      <section className="grid gap-3 md:grid-cols-4">
-        <Stat label="Squadre" value={tournament.teams.length} icon={Layers3} />
-        <Stat label="Gironi" value={tournament.groups.length} icon={Trophy} />
-        <Stat label="Campi" value={tournament.courts.length} icon={ShieldCheck} />
-        <Stat label="Partite" value={tournament.matches.length} icon={CalendarPlus} />
-      </section>
-
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <ActionCard to="/admin/setup" label="Configurazione torneo" icon={Wrench} />
-        <ActionCard to="/admin/control-room" label="Regia in diretta" icon={ShieldCheck} />
+      <Link to="/admin/control-room" className="flex min-h-20 items-center justify-between rounded border border-[var(--event-primary)]/50 bg-[var(--event-primary)] px-5 text-lg font-black uppercase text-black"><span>{currentRound?'GESTISCI TURNO':'VAI ALLA REGIA'}</span><ShieldCheck className="size-6" /></Link>
+      <Paper sx={{p:2.5}}><p className="text-xs font-black uppercase tracking-[.16em] text-white/45">Situazione operativa</p><div className="mt-3 grid gap-2 text-sm font-bold sm:grid-cols-3"><span>{tournament.courts.length} campi</span><span>{tournament.teams.length} squadre</span><span>{tournament.matches.length} partite</span></div></Paper>
+      <section className="grid gap-2 md:grid-cols-3">
+        <ActionCard to="/admin/setup" label="Configurazione" icon={Wrench} />
         <ActionCard to="/admin/access" label="Gestione accessi" icon={KeyRound} />
-        <ActionCard to="/admin/recovery" label="Backup e ripristino" icon={CalendarPlus} />
+        <ActionCard to="/admin/recovery" label="Backup" icon={CalendarPlus} />
+        <ActionCard to="/admin/tournaments" label="Gestione tornei" icon={Trash2} />
       </section>
     </div></PageShell>
   )
@@ -60,16 +55,6 @@ function CurrentRoundBadge({ round }: { round?: Round }) {
       <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--event-primary)]">Turno attuale</p>
       <p className="mt-1 font-black">{round ? `${round.name} · ${round.status}` : 'Nessun turno configurato'}</p>
     </div>
-  )
-}
-
-function Stat({ icon: Icon, label, value }: { icon: typeof Layers3; label: string; value: number }) {
-  return (
-    <Paper component="article" sx={{ p: 3 }}>
-      <Icon className="mb-3 size-5 text-[var(--event-primary)]" />
-      <p className="text-3xl font-black">{value}</p>
-      <p className="text-sm font-bold text-white/50">{label}</p>
-    </Paper>
   )
 }
 

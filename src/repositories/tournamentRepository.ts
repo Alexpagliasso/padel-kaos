@@ -7,7 +7,7 @@ import { useSupabaseTournamentRepository } from './supabase/supabaseRepositories
 import { createSupabaseTournamentAdminRepository } from './supabase/supabaseTournamentAdminRepository'
 import { supabaseTournamentKeys } from './supabase/queryKeys'
 import { resolveSelectedTournamentId, useSelectedTournamentStore } from '../features/tournament/selectedTournamentStore'
-import { cleanupTournamentAuthUsers } from '../services/supabase/provisioning'
+import { deleteTournamentPermanently } from '../services/supabase/provisioning'
 
 export function useTournamentRepository() {
   const supabaseEnabled = dataProvider === 'supabase'
@@ -73,11 +73,10 @@ export function useTournamentRepository() {
     },
   })
   const deleteMutation = useMutation({
-    mutationFn: async (tournamentId: string) => {
-      await cleanupTournamentAuthUsers(tournamentId)
-      await createSupabaseTournamentAdminRepository().deleteTournamentIfSafe(tournamentId)
+    mutationFn: async ({tournamentId,forceActive}:{tournamentId:string;forceActive:boolean}) => {
+      await deleteTournamentPermanently(tournamentId,forceActive)
     },
-    onSuccess: async (_, tournamentId) => {
+    onSuccess: async (_, {tournamentId}) => {
       queryClient.removeQueries({ queryKey: supabaseTournamentKeys.detail(tournamentId) })
       queryClient.setQueryData<typeof listQuery.data>(supabaseTournamentKeys.list(), current =>
         current?.filter(item => item.id !== tournamentId))
@@ -102,7 +101,7 @@ export function useTournamentRepository() {
     selectTournament,
     createTournament,
     updateTournamentConfiguration: (tournamentId: string, input: TournamentConfigurationInput) => updateMutation.mutateAsync({ tournamentId, input }),
-    deleteTournamentIfSafe: (tournamentId: string) => deleteMutation.mutateAsync(tournamentId),
+    deleteTournamentIfSafe: (tournamentId: string,forceActive=false) => deleteMutation.mutateAsync({tournamentId,forceActive}),
     isLoading: listQuery.isLoading || (Boolean(resolvedTournamentId) && supabaseRepository.isLoading),
     isCreating: createMutation.isPending,
     isSaving: updateMutation.isPending,

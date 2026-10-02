@@ -48,9 +48,9 @@ export function useAdminWorkspace() {
           return [error instanceof Error ? error.message : 'Impossibile salvare la configurazione del torneo.']
         }
       },
-      deleteTournamentIfSafe: async (target: WorkspaceEntry) => {
+      deleteWorkspaceTournament: async (target: WorkspaceEntry,forceActive=false) => {
         if (!source.deleteTournamentIfSafe) throw new Error('Eliminazione torneo non disponibile')
-        await source.deleteTournamentIfSafe(target.domain.id)
+        await source.deleteTournamentIfSafe(target.domain.id,forceActive)
       },
     }
   }
@@ -63,6 +63,7 @@ export function useAdminWorkspace() {
   const entry = available.find(item => item.domain.id === state.selectedId) ?? available[0]
   return { ...source, source, entry, available, data: entry ? projectTournament(entry) : emptyTournament('empty-workspace', 'Nessun torneo selezionato'), state,
     remote: false as const, selectTournament: (id: string) => state.select(id),
+    deleteWorkspaceTournament: undefined,
     createTournament: async (name: string) => {
       const id = state.createTournament(name)
       return entryFromTournament(useWorkspaceStore.getState().entries[id].domain)

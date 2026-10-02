@@ -145,6 +145,13 @@ describe('tournament setup interactions', async () => {
     expect(useWorkspaceStore.getState().entries[id].activeEvents).not.toContain(event.id)
     expect(screen.getByRole('heading', { name: 'Golden smash' })).toBeTruthy()
   })
+  it('exposes the tournament Dice Library editor', () => {
+    useWorkspaceStore.getState().createTournament('Dice Cup')
+    mount(<TournamentSetupPage initialSection="DICE" />)
+    expect(screen.getByRole('heading', { name: 'Libreria Dado' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'NUOVO EFFETTO' })).toBeTruthy()
+    expect(screen.getByText(/può contenere più di sei effetti/)).toBeTruthy()
+  })
 })
 describe('event operations and final reports', async () => {
   it('shows the current Regia operation gates without mutating demo dice state', async () => {
@@ -153,9 +160,43 @@ describe('event operations and final reports', async () => {
     useWorkspaceStore.getState().transition(entry, 'start')
     mount(<ControlRoomContent tournament={t} />)
     expect(screen.queryByText(/\+ Point|\+ Game/)).toBeNull()
-    fireEvent.click(screen.getByRole('tab', { name: 'LIVE' }))
     expect((screen.getByRole('button', { name: 'LANCIA DADO GLOBALE' }) as HTMLButtonElement).disabled).toBe(true)
     expect(useWorkspaceStore.getState().entries[t.id].dice).toBeUndefined()
+  })
+
+  it('organizes Regia into preparation and live modes', () => {
+    const t = createDemoTournament()
+    mount(<ControlRoomContent tournament={t} />)
+    expect(screen.getByRole('tab', { name: 'PREPARAZIONE' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'LIVE' })).toBeTruthy()
+    expect(screen.getByText('PROSSIMA AZIONE')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'DADO DEL TURNO' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'JOLLY' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'EVENTI SPECIALI' })).toBeTruthy()
+    expect(screen.getByText('CONTROLLO PRE-AVVIO')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'AVVIA TURNO' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'LIVE' }))
+    expect(screen.getByText('TORNEO LIVE')).toBeTruthy()
+  })
+
+  it('locks dice and Jolly configuration after the turn starts', () => {
+    const t = createDemoTournament()
+    if (t.rounds?.[0]) t.rounds[0].openedAt = '2026-09-28T10:00:00.000Z'
+    t.matches[0].status = 'live_set_1'
+    mount(<ControlRoomContent tournament={t} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'PREPARAZIONE' }))
+    expect(screen.getByText('CONFIGURAZIONE BLOCCATA — TURNO IN CORSO')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'SALVA SELEZIONE DADO' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'SALVA CARTE COPIABILI' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+  it('offers Regia only tournament-enabled dice effects as a compact turn selection', () => {
+    const t = createDemoTournament()
+    t.diceRules[2].enabled = false
+    mount(<ControlRoomContent tournament={t} />)
+    expect(screen.getByText('5 / 6 FACCE SELEZIONATE')).toBeTruthy()
+    expect(screen.getByText('SERVONO ALMENO 6 EFFETTI DADO ATTIVI')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /PALLINE SGONFIE/ })).toBeNull()
+    expect(screen.getByRole('button', { name: /ONE VS ONE ✓/ })).toBeTruthy()
   })
   it('submits a final referee report with the entered set scores', async () => {
     const t = createDemoTournament()

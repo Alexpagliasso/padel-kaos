@@ -6,7 +6,7 @@ vi.mock('./client', () => ({ requireSupabase: () => ({
   auth: { getSession: async () => ({ data: { session: { access_token: 'token' } }, error: null }) },
 }) }))
 
-import { cleanupTournamentAuthUsers, provisionTeamAccounts, provisionTournamentUser, STANDARD_TEST_PASSWORD } from './provisioning'
+import { cleanupTournamentAuthUsers, deleteTournamentPermanently, provisionTeamAccounts, provisionTournamentUser, STANDARD_TEST_PASSWORD } from './provisioning'
 
 beforeEach(() => invoke.mockReset())
 
@@ -33,4 +33,6 @@ describe('authoritative Edge Function callers', () => {
       body: { action: 'cleanup_tournament_auth', tournamentId: 'target' },
     })
   })
+
+  it('shows a safe diagnostic phase for a failed permanent deletion',async()=>{const context=new Response(JSON.stringify({deleted:0,alreadyMissing:0,failed:3,storageDeleted:0,tournamentDeleted:false,failures:[{phase:'auth_delete',code:'500'}]}),{status:409});invoke.mockResolvedValueOnce({data:null,error:{message:'Edge Function returned a non-2xx status code',context}});await expect(deleteTournamentPermanently('target',false)).rejects.toThrow('3 account (account Auth)');expect(invoke).toHaveBeenCalledWith('provision-tournament-user',{body:{action:'delete_tournament',tournamentId:'target',forceActive:false}})})
 })

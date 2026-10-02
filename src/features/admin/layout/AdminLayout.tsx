@@ -26,7 +26,7 @@ export function AdminLayout() {
       <Typography color="text.secondary" sx={{ fontSize: 13, my: 2 }}>{tournament.name}</Typography>
       <StatusChip label={entry?.config.status ?? 'draft'} />
     </Box>
-    <AdminNavigation onNavigate={() => setOpen(false)} /><AdminPreviewLinks />
+    <AdminNavigation hasTournament={Boolean(entry)} onNavigate={() => setOpen(false)} /><AdminPreviewLinks />
     <Box sx={{ mt: 'auto', p: 3 }}>{auth?.profile ? <LogoutButton /> : <Typography color="text.secondary" sx={{ fontSize: 13 }}>Demo / Area Admin</Typography>}</Box>
   </Box>
   return <Box className="admin-shell" sx={{ minHeight: '100svh', pl: { lg: allowed ? '272px' : 0 }, background: 'radial-gradient(ellipse at top right, var(--event-soft), transparent 50%)' }}>{allowed && <>

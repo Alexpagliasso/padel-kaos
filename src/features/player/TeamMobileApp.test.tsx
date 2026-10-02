@@ -18,19 +18,19 @@ function renderApp(configure?: (tournament: ReturnType<typeof createDemoTourname
 }
 
 describe('Team mobile app navigation', () => {
-  it('opens Partita by default and offers Formazione, results, standings, Cards and logout', () => {
+  it('opens Partita by default and offers the four required destinations and logout', () => {
     renderApp()
     expect(screen.getByRole('button', { name: 'Partita' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByRole('navigation', { name: 'Navigazione squadra' }).querySelectorAll('button')).toHaveLength(5)
-    expect(Array.from(screen.getByRole('navigation', { name: 'Navigazione squadra' }).querySelectorAll('button')).map(button => button.textContent)).toEqual(['Partita', 'Formazione', 'Classifica', 'Risultati', '3Carte'])
-    expect(screen.getByRole('button', { name: /Apri carte, \d+ disponibili/ })).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'Navigazione squadra' }).querySelectorAll('button')).toHaveLength(4)
+    expect(Array.from(screen.getByRole('navigation', { name: 'Navigazione squadra' }).querySelectorAll('button')).map(button => button.textContent)).toEqual(['Partita', 'Formazione', 'Risultati', 'Classifica'])
     expect(screen.getByRole('button', { name: 'Esci' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Attesa avvio set' })).toBeTruthy()
     expect(screen.getAllByText(/team red/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/team blue/i).length).toBeGreaterThan(0)
   })
 
   it('opens Classifica and Risultati independently using real Team data', async () => {
-    renderApp()
+    renderApp(value=>{value.matches[0].status='live_set_1';value.matches[0].set1StartedAt='2026-09-17T10:00:00Z'})
     fireEvent.click(screen.getByRole('button', { name: 'Classifica' }))
     expect(await screen.findByRole('heading', { name: 'Classifica' })).toBeTruthy()
     expect(document.querySelector('[data-current-team="true"]')?.textContent).toMatch(/team red/i)
@@ -39,16 +39,26 @@ describe('Team mobile app navigation', () => {
     expect(screen.getAllByText(/team blue/i).length).toBeGreaterThan(0)
   })
 
-  it('opens Cards as an action and returns to the previously selected destination', async () => {
-    renderApp()
-    fireEvent.click(screen.getByRole('button', { name: 'Classifica' }))
-    expect(await screen.findByRole('heading', { name: 'Classifica' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Apri carte, \d+ disponibili/ }))
+  it('keeps an unconfirmed lineup draft when visiting Results and returning home', async () => {
+    const { tournament }=renderApp(value=>{value.matches[0].status='scheduled';value.matches[0].set1StartedAt=undefined;value.matches[0].lineups=value.matches[0].lineups.filter(lineup=>lineup.teamId!=='team-red'||lineup.setNumber!==1)})
+    const own=tournament.teams.find(team=>team.id==='team-red')!
+    fireEvent.click(screen.getByRole('button',{name:own.players[0].name}))
+    fireEvent.click(screen.getByRole('button',{name:own.players[1].name}))
+    expect(screen.getByRole('button',{name:own.players[0].name}).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button',{name:'Risultati'}))
+    fireEvent.click(screen.getByRole('button',{name:'Partita'}))
+    expect((await screen.findByRole('button',{name:own.players[0].name})).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button',{name:own.players[1].name}).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button',{name:'CONFERMA FORMAZIONE'}).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('opens Cards from the contextual Partita action and returns to Partita', async () => {
+    renderApp(value=>{value.matches[0].status='live_set_1';value.matches[0].set1StartedAt='2026-09-17T10:00:00Z'})
+    fireEvent.click(screen.getByRole('button', { name: /LE MIE CARTE/ }))
     expect(await screen.findByRole('heading', { name: 'Le tue carte' })).toBeTruthy()
     expect(screen.queryByRole('navigation', { name: 'Navigazione squadra' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Chiudi carte' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Classifica' }).getAttribute('aria-current')).toBe('page'))
-    expect(screen.getByRole('heading', { name: 'Classifica' })).toBeTruthy()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Partita' }).getAttribute('aria-current')).toBe('page'))
   })
 
   it('keeps Set 1 and Set 2 visible, shows the opponent confirmation, and hides STB initially', async () => {
@@ -85,7 +95,8 @@ describe('Team mobile app navigation', () => {
 
   it('selects only Team matches, preserves selection across tabs, and scopes Cards to it', async () => {
     const { tournament } = renderApp(value => {
-      value.matches.push({ ...value.matches[0], id: 'match-red-2', teamBId: 'team-yellow', courtId: 'court-2', status: 'scheduled', lineups: [], score: { ...value.matches[0].score, currentSet: 1 } })
+      value.matches[0].status='live_set_1';value.matches[0].set1StartedAt='2026-09-17T10:00:00Z'
+      value.matches.push({ ...value.matches[0], id: 'match-red-2', teamBId: 'team-yellow', courtId: 'court-2', status: 'scheduled', set1StartedAt:undefined, lineups: [], score: { ...value.matches[0].score, currentSet: 1 } })
       value.teamCards.push({ id: 'tc-red-second', teamId: 'team-red', cardId: 'card-power-point', matchId: 'match-red-2', state: 'available' })
     })
     const selector = screen.getByRole('combobox', { name: 'Seleziona partita' }) as HTMLSelectElement
@@ -93,26 +104,30 @@ describe('Team mobile app navigation', () => {
     expect(Array.from(selector.options).every(option => !option.textContent?.includes('TEAM BLACK'))).toBe(true)
     fireEvent.change(selector, { target: { value: 'match-red-2' } })
     expect(screen.getAllByText('TEAM YELLOW').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Apri carte, 1 disponibili' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Scegli la formazione' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Classifica' }))
     fireEvent.click(screen.getByRole('button', { name: 'Partita' }))
-    expect((await screen.findByRole('combobox', { name: 'Seleziona partita' }) as HTMLSelectElement).value).toBe('match-red-2')
+    expect(await screen.findByRole('heading', { name: 'Scegli la formazione' })).toBeTruthy()
+    expect(screen.getAllByText('TEAM YELLOW').length).toBeGreaterThan(0)
     expect(tournament.matches.find(match => match.id === 'match-red-2')).toBeTruthy()
   })
 
   it('shows the preparation state for a new match without carrying the previous hand', () => {
     renderApp(value => {
-      value.matches.push({ ...value.matches[0], id: 'match-red-2', teamBId: 'team-yellow', courtId: 'court-2', status: 'scheduled', lineups: [], score: { ...value.matches[0].score, currentSet: 1 } })
+      value.matches[0].status='live_set_1';value.matches[0].set1StartedAt='2026-09-17T10:00:00Z'
+      value.matches.push({ ...value.matches[0], id: 'match-red-2', teamBId: 'team-yellow', courtId: 'court-2', status: 'scheduled', set1StartedAt:undefined, lineups: [], score: { ...value.matches[0].score, currentSet: 1 } })
     })
     fireEvent.change(screen.getByRole('combobox', { name: 'Seleziona partita' }), { target: { value: 'match-red-2' } })
-    expect(screen.getByText('CARTE NON ANCORA ASSEGNATE')).toBeTruthy()
-    expect(screen.getByText("Le carte per questa partita verranno assegnate dalla Regia prima dell'inizio del turno.")).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Apri carte, nessuna disponibile' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('heading', { name: 'Scegli la formazione' })).toBeTruthy()
+    expect(screen.queryByText('CARTE NON ANCORA ASSEGNATE')).toBeNull()
+    expect(screen.queryByRole('button', { name: /LE MIE CARTE/ })).toBeNull()
   })
 
   it('moves from the completed current match to the next match after a realtime refresh', async () => {
     const tournament = createDemoTournament()
-    tournament.matches.push({ ...tournament.matches[0], id: 'match-red-next', teamBId: 'team-yellow', courtId: 'court-2', status: 'scheduled', lineups: [], score: { ...tournament.matches[0].score, currentSet: 1 } })
+    tournament.matches[0].status='live_set_1'
+    tournament.matches[0].set1StartedAt='2026-09-17T10:00:00Z'
+    tournament.matches.push({ ...tournament.matches[0], id: 'match-red-next', teamBId: 'team-yellow', courtId: 'court-2', status: 'scheduled', set1StartedAt:undefined, lineups: [], score: { ...tournament.matches[0].score, currentSet: 1 } })
     const first = resolvePlayerRouteState({ provider: 'demo', tournament, demoSelectedTeamId: 'team-red' })
     if (first.type !== 'ready') throw new Error('Stato Team non pronto')
     const view = render(<QueryClientProvider client={new QueryClient()}><TeamMobileApp tournament={tournament} events={[]} routeState={first} onSelectDemoTeam={vi.fn()} onPlayDemoCard={vi.fn()} /></QueryClientProvider>)
@@ -122,8 +137,8 @@ describe('Team mobile app navigation', () => {
     const refreshed = resolvePlayerRouteState({ provider: 'demo', tournament, demoSelectedTeamId: 'team-red' })
     if (refreshed.type !== 'ready') throw new Error('Stato Team non pronto')
     view.rerender(<QueryClientProvider client={new QueryClient()}><TeamMobileApp tournament={tournament} events={[]} routeState={refreshed} onSelectDemoTeam={vi.fn()} onPlayDemoCard={vi.fn()} /></QueryClientProvider>)
-    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Seleziona partita' }) as HTMLSelectElement).value).toBe('match-red-next'))
-    expect(screen.getByText('CARTE NON ANCORA ASSEGNATE')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Scegli la formazione' })).toBeTruthy()
+    expect(screen.getAllByText('TEAM YELLOW').length).toBeGreaterThan(0)
   })
 
   it('opens the exact match selected from Risultati', async () => {
@@ -181,20 +196,44 @@ describe('interactive Team card deck', () => {
     expect(document.querySelector('[data-card-experience="fullscreen"]')).toBeTruthy()
     if (count > 1) expect(screen.getByLabelText(`Carta 1 di ${count}`)).toBeTruthy()
     if (count > 1) { fireEvent.click(screen.getByRole('button', { name: 'Carta successiva' })); expect(screen.getByLabelText(`Carta 2 di ${count}`)).toBeTruthy() }
-    expect(screen.getAllByRole('button', { name: 'Utilizza' })[0].hasAttribute('disabled')).toBe(false)
+    expect(screen.getAllByRole('button', { name: 'Gioca carta' })[0].hasAttribute('disabled')).toBe(false)
   })
 
-  it('opens details inside the fullscreen experience and returns to the same card', () => {
+  it('opens details inside the fullscreen experience and returns to the same card', async () => {
     const tournament = createDemoTournament()
     const play = vi.fn()
     const card = tournament.teamCards.find(item => item.teamId === 'team-red')!
     const definition = tournament.cards.find(item => item.id === card.cardId)!
     render(<TeamCardDeck open onClose={vi.fn()} cards={[card]} definitions={tournament.cards} demo={false} onPlayDemoCard={play} />)
     fireEvent.click(screen.getByRole('button', { name: `Dettagli carta ${definition.name}` }))
-    expect(screen.getByText(definition.longDescription || definition.description)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Torna alla mano' }))
-    expect(screen.getByRole('button', { name: `Dettagli carta ${definition.name}` })).toBeTruthy()
+    expect(screen.getAllByText(definition.description).length).toBeGreaterThan(0)
+    expect(await screen.findByRole('button', { name: 'COME FUNZIONA' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'COME FUNZIONA' }))
+    expect(screen.getAllByText(definition.longDescription || definition.description).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Gioca carta' }).length).toBeGreaterThan(0)
     expect(play).not.toHaveBeenCalled()
+  })
+
+  it('keeps a very long card description scrollable and the play action outside the scroll body', async () => {
+    const tournament = createDemoTournament()
+    const card = tournament.teamCards.find(item => item.teamId === 'team-red')!
+    const definition = tournament.cards.find(item => item.id === card.cardId)!
+    definition.description = 'Descrizione estesa '.repeat(120)
+    definition.longDescription = 'Istruzioni complete '.repeat(160)
+    const play = vi.fn().mockResolvedValue('Carta richiesta')
+    render(<TeamCardDeck open onClose={vi.fn()} cards={[card]} definitions={tournament.cards} demo={false} onPlayDemoCard={play} />)
+    fireEvent.click(screen.getByRole('button', { name: `Dettagli carta ${definition.name}` }))
+    const description=document.querySelector('[data-card-description]')!
+    const scrollBody=document.querySelector('[data-card-detail-scroll]')!
+    const actions=document.querySelector('[data-card-detail-actions]')!
+    expect(description.className).not.toMatch(/line-clamp|overflow-hidden/)
+    expect(scrollBody.className).toContain('overflow-y-auto')
+    expect(actions.parentElement).not.toBe(scrollBody)
+    const button=actions.querySelector('button[aria-label="Gioca carta"]') as HTMLButtonElement
+    expect(button).toBeTruthy()
+    fireEvent.click(button)
+    await waitFor(()=>expect(play).toHaveBeenCalledWith(card.id))
+    expect(screen.getByRole('button',{name:'Chiudi carte'})).toBeTruthy()
   })
 
   it('renders an intentional empty fullscreen state', () => {
@@ -226,16 +265,38 @@ describe('interactive Team card deck', () => {
     expect(screen.getByLabelText(`Carta 2 di ${cards.length}`)).toBeTruthy()
   })
 
-  it('keeps the Utilizza copy stable across enabled and disabled card states', () => {
+  it('keeps the Gioca carta copy stable across enabled and disabled card states', () => {
     const tournament = createDemoTournament()
     const card = tournament.teamCards.find(item => item.teamId === 'team-red')!
     const play = vi.fn()
     const { rerender } = render(<TeamCardDeck open onClose={vi.fn()} cards={[card]} definitions={tournament.cards} demo onPlayDemoCard={play} />)
-    const enabled = screen.getByRole('button', { name: 'Utilizza' })
+    const enabled = screen.getByRole('button', { name: 'Gioca carta' })
     expect(enabled.hasAttribute('disabled')).toBe(false)
     fireEvent.click(enabled)
     expect(play).toHaveBeenCalledWith(card.id)
     rerender(<TeamCardDeck open onClose={vi.fn()} cards={[{ ...card, state: 'used' }]} definitions={tournament.cards} demo onPlayDemoCard={play} />)
-    expect(screen.getByRole('button', { name: 'Utilizza' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Gioca carta' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('lets Team choose one eligible power and play Jolly', async () => {
+    const tournament = createDemoTournament()
+    const base = tournament.cards[0]
+    const jolly = { ...base, id: 'jolly', name: 'Jolly', slug: 'jolly', effectType: 'jolly' }
+    const target = { ...base, id: 'target', name: 'Power Point', slug: 'power-point' }
+    const play = vi.fn().mockResolvedValue('Jolly giocato')
+    render(<TeamCardDeck open onClose={vi.fn()} cards={[{ id: 'tc-jolly', teamId: 'team-red', cardId: 'jolly', state: 'available' }]} definitions={[jolly, target]} demo={false} onPlayDemoCard={play} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Power Point' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Gioca Jolly' }))
+    await waitFor(() => expect(play).toHaveBeenCalledWith('tc-jolly', 'target'))
+  })
+
+  it('plays Lupin without asking Team to choose a stolen target', async () => {
+    const tournament = createDemoTournament()
+    const lupin = { ...tournament.cards[0], id: 'lupin', name: 'Lupin', slug: 'lupin', effectType: 'lupin' }
+    const play = vi.fn().mockResolvedValue('Lupin giocato')
+    render(<TeamCardDeck open onClose={vi.fn()} cards={[{ id: 'tc-lupin', teamId: 'team-red', cardId: 'lupin', state: 'available' }]} definitions={[lupin]} demo={false} onPlayDemoCard={play} />)
+    expect(screen.queryByText(/scegli.*carta/i)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Gioca carta' }))
+    await waitFor(() => expect(play).toHaveBeenCalledWith('tc-lupin'))
   })
 })

@@ -1,6 +1,6 @@
 import { describe,expect,it } from 'vitest'
 import { createDemoTournament } from '../../../demo/demoSeed'
-import { getControlRoomRound,getCurrentRoundMatches,getOperationalAttention } from './controlRoomState'
+import { getControlRoomMode,getControlRoomRound,getCurrentRoundMatches,getNextControlRoomAction,getOperationalAttention,getRoundReadiness } from './controlRoomState'
 
 describe('current Regia round',()=>{
   it('moves from a completed first round to the next round without stale matches',()=>{
@@ -18,5 +18,19 @@ describe('current Regia round',()=>{
     const messages=getOperationalAttention(tournament,tournament.rounds?.[0]).map(item=>item.message)
     expect(messages.some(message=>message.includes('Risultato Set 1 da inviare'))).toBe(true)
     expect(messages.some(message=>message.includes('carta in attesa'))).toBe(true)
+  })
+  it('derives preparation readiness and the next action without changing match state',()=>{
+    const tournament=createDemoTournament();const round=tournament.rounds?.[0]
+    tournament.matches.forEach(match=>{match.status='scheduled';match.lineups=[]})
+    expect(getControlRoomMode(tournament.matches)).toBe('preparation')
+    const readiness=getRoundReadiness(tournament,round,[])
+    expect(readiness.missingLineups).toBe(tournament.matches.length*2)
+    expect(getNextControlRoomAction(tournament,round,[]).target).toBe('lineups')
+    expect(tournament.matches.every(match=>match.lineups.length===0)).toBe(true)
+  })
+  it('switches to live mode as soon as a field starts',()=>{
+    const tournament=createDemoTournament();tournament.matches[0].status='live_set_1'
+    expect(getControlRoomMode(tournament.matches)).toBe('live')
+    expect(getNextControlRoomAction(tournament,tournament.rounds?.[0],[]).mode).toBe('live')
   })
 })

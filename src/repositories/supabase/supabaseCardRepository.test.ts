@@ -52,6 +52,26 @@ describe('Supabase card repository', () => {
     })
   })
 
+  it('persists timed-card form minutes as canonical seconds', async () => {
+    const { repository, insert } = setup()
+    await repository.createCardDefinition({ ...input, durationType: 'timed', durationValue: 5 })
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      duration_type: 'timed',
+      duration_value: 300,
+    }))
+  })
+
+  it('keeps timed-card database values in canonical seconds', async () => {
+    const current = setup()
+    current.definitionBuilder.order.mockResolvedValueOnce({
+      data: [row({ duration_type: 'timed', duration_value: 300 })],
+      error: null,
+    })
+    await expect(current.repository.listCardDefinitions()).resolves.toMatchObject([
+      { durationType: 'timed', durationValue: 300 },
+    ])
+  })
+
   it('maps short and long descriptions independently with a legacy fallback', async () => {
     const current = setup()
     await expect(current.repository.listCardDefinitions()).resolves.toMatchObject([{ description: 'Next point wins', longDescription: 'The next rally decides the game.' }])

@@ -1,6 +1,5 @@
 import { PageShell } from '../../../shared/components/Foundation'
-import { AccessManagementPanel } from '../../auth/AccessManagementPanel'
-import { RlsDebugPanel } from '../../auth/RlsDebugPanel'
+import { TournamentAccessManager } from './TournamentAccessManager'
 import { useAdminWorkspace } from '../workspace/useAdminWorkspace'
 import { AdminPageState } from '../dashboard/AdminDashboard'
 
@@ -14,11 +13,10 @@ export function AdminAccess() {
   return (
     <PageShell><div className=" grid w-full max-w-7xl gap-5 ">
       <header>
-        <p className="text-sm font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">Gestione accessi</p>
+        <p className="text-sm font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">Accessi torneo</p>
         <h1 className="mt-2 text-3xl font-black">{tournament.name}</h1>
       </header>
-      <AccessManagementPanel tournament={tournament} />
-      <RlsDebugPanel tournament={tournament} />
+      <TournamentAccessManager key={tournament.id} tournament={tournament} />
     </div></PageShell>
   )
 }

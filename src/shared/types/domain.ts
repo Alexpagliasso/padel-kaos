@@ -116,6 +116,7 @@ export type CardDefinition = {
   target: 'own_team' | 'opponent' | 'match' | 'global'
   activationTiming: 'before_point' | 'between_games' | 'set_break' | 'anytime'
   durationType: CardDurationType
+  /** Seconds for timed cards; unit count for the other duration types. */
   durationValue: number
   effectType: string
   targetType?: 'own_team' | 'opponent' | 'match' | 'round' | 'global' | 'active_card'
@@ -139,6 +140,8 @@ export type TeamCard = {
   expiresAt?: string
   remainingGames?: number
   stolenFromTeamId?: string
+  resolvedCardDefinitionId?: string
+  resolvedFromMatchCardId?: string
 }
 
 export type DiceRule = {
@@ -146,6 +149,8 @@ export type DiceRule = {
   value: 1 | 2 | 3 | 4 | 5 | 6
   title: string
   description: string
+  longDescription?: string
+  imageUrl?: string | null
   effectType: string
   durationGames?: number
   durationSeconds?: number
@@ -232,6 +237,7 @@ export type Round = {
   cardReadyTeams?: number
   cardReadinessReady?: boolean
   cardReadinessBlockers?: Array<{ matchId: string; courtId: string; teamId: string; expectedCards: number; assignedCards: number }>
+  enabledDiceRuleIds?: string[]
 }
 
 export type Court = {
@@ -292,6 +298,7 @@ export type Tournament = {
   specialEventsEnabled?: boolean
   defaultSetDurationMinutes?: number
   defaultTimedCardDurationMinutes?: number
+  jollyCopyTargetIds?: string[]
   groups: Group[]
   courts: Court[]
   rounds?: Round[]

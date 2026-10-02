@@ -20,6 +20,7 @@ import type {
   TournamentPhase,
 } from '../../../shared/types/domain'
 import { splitLegacyPlayerName } from '../../../shared/lib/playerNames'
+import { timedCardSecondsToMinutes } from '../../../domain/cards/cardDuration'
 
 export type SupabaseTournamentRow = {
   id: string
@@ -156,13 +157,13 @@ export type SupabaseCardDefinitionRow = {
   slug: string
   description: string
   long_description?: string | null
+  image_url?: string | null
   effect_type: string
   target_type: string
   duration_type: string
   duration_value: number | null
   can_be_stolen: boolean | null
   enabled: boolean | null
-  image_url?: string | null
   archived_at?: string | null
   updated_at?: string | null
 }
@@ -178,6 +179,8 @@ export type SupabaseMatchCardRow = {
   expires_at: string | null
   remaining_games: number | null
   stolen_from_team_id: string | null
+  resolved_card_definition_id?: string | null
+  resolved_from_match_card_id?: string | null
 }
 
 export type SupabaseDiceRuleRow = {
@@ -185,6 +188,8 @@ export type SupabaseDiceRuleRow = {
   dice_value: number
   title: string
   description: string
+  long_description?: string | null
+  image_url?: string | null
   effect_type: string
   duration_seconds: number
   enabled: boolean | null
@@ -242,6 +247,8 @@ export type SupabaseTournamentStateDto = {
   tournamentEvents?: SupabaseTournamentEventRow[] | null
   globalEvents?: SupabaseGlobalEventRow[] | null
   eventWinnerReports?: SupabaseEventWinnerReportRow[] | null
+  roundDiceEffects?: Array<{round_id:string;dice_rule_id:string;enabled:boolean}> | null
+  jollyCopyTargets?: Array<{tournament_id:string;card_definition_id:string;enabled:boolean}> | null
 }
 
 export function createEmptyTournamentDomain(message = 'No tournament configured'): Tournament {
@@ -338,10 +345,11 @@ export function mapSupabaseTournamentState(dto: SupabaseTournamentStateDto): Tou
     diceEnabled: dto.tournament.dice_enabled ?? true,
     specialEventsEnabled: dto.tournament.special_events_enabled ?? true,
     defaultSetDurationMinutes: dto.tournament.default_set_duration_minutes ?? 15,
-    defaultTimedCardDurationMinutes: (dto.tournament.default_timed_card_duration_seconds ?? 300) / 60,
+    defaultTimedCardDurationMinutes: timedCardSecondsToMinutes(dto.tournament.default_timed_card_duration_seconds ?? 300),
+    jollyCopyTargetIds: (dto.jollyCopyTargets ?? []).filter(item=>item.enabled).map(item=>item.card_definition_id),
     groups: (dto.groups ?? []).map((group) => ({ id: group.id, name: group.name, tournamentId: group.tournament_id ?? dto.tournament.id, sortOrder: group.sort_order, assignedCourtId: group.assigned_court_id ?? null })),
     courts: (dto.courts ?? []).map((court) => ({ id: court.id, name: court.name })),
-    rounds: (dto.rounds ?? []).map(round => ({ ...mapRound(round), effectiveSetDurationMinutes: round.set_duration_minutes ?? dto.tournament.default_set_duration_minutes ?? 15 })),
+    rounds: (dto.rounds ?? []).map(round => ({ ...mapRound(round), effectiveSetDurationMinutes: round.set_duration_minutes ?? dto.tournament.default_set_duration_minutes ?? 15, enabledDiceRuleIds:(dto.roundDiceEffects??[]).filter(item=>item.round_id===round.id&&item.enabled).map(item=>item.dice_rule_id) })),
     teams,
     matches,
     cards: (dto.cards ?? []).map(mapCardDefinition),
@@ -438,7 +446,7 @@ function mapCardDefinition(card: SupabaseCardDefinitionRow): CardDefinition {
     target: mapCardTarget(card.target_type),
     activationTiming: 'anytime',
     durationType: mapCardDurationType(card.duration_type),
-    durationValue: card.duration_type === 'timed' ? Math.max(1, (card.duration_value ?? 60) / 60) : card.duration_value ?? 1,
+    durationValue: card.duration_value ?? (card.duration_type === 'timed' ? 60 : 1),
     effectType: card.effect_type,
     targetType: mapCardTargetType(card.target_type),
     canBeStolen: card.can_be_stolen ?? false,
@@ -465,6 +473,8 @@ function mapTeamCard(card: SupabaseMatchCardRow): TeamCard {
     expiresAt: card.expires_at ?? undefined,
     remainingGames: card.remaining_games ?? undefined,
     stolenFromTeamId: card.stolen_from_team_id ?? undefined,
+    resolvedCardDefinitionId: card.resolved_card_definition_id ?? undefined,
+    resolvedFromMatchCardId: card.resolved_from_match_card_id ?? undefined,
   }
 }
 
@@ -474,6 +484,8 @@ function mapDiceRule(rule: SupabaseDiceRuleRow): DiceRule {
     value: mapDiceValue(rule.dice_value) ?? 1,
     title: rule.title,
     description: rule.description,
+    longDescription: rule.long_description ?? rule.description,
+    imageUrl: rule.image_url ?? null,
     effectType: rule.effect_type,
     durationGames: Math.max(1, Math.ceil(rule.duration_seconds / 300)),
     durationSeconds: rule.duration_seconds,
@@ -531,7 +543,8 @@ function mapGender(gender: string): PlayerGender {
 function mapMatchStatus(status: string): MatchStatus {
   if (status === 'set_1') return 'live_set_1'
   if (status === 'waiting_global_dice') return 'kaos_pending'
-  if (status === 'set_2' || status === 'super_tiebreak') return 'live_set_2'
+  if (status === 'set_2') return 'live_set_2'
+  if (status === 'super_tiebreak') return 'super_tiebreak'
   if (status === 'scheduled' || status === 'ready' || status === 'set_break' || status === 'completed') return status
   return 'scheduled'
 }

@@ -3,6 +3,7 @@ import type { CardDefinition } from '../../shared/types/domain'
 import { requireSupabase } from '../../services/supabase/client'
 import type { CardAdminRepositoryContract, CardDefinitionInput } from '../contracts'
 import { cardImageObjectPath, validateCardImage } from '../../domain/cards/cardImage'
+import { timedCardMinutesToSeconds } from '../../domain/cards/cardDuration'
 
 export const cardDefinitionColumns = 'id,tournament_id,name,slug,description,long_description,image_url,effect_type,target_type,duration_type,duration_value,can_be_stolen,enabled,archived_at,updated_at'
 
@@ -119,7 +120,7 @@ function toCardRow(input: CardDefinitionInput) {
     effect_type: input.effectType.trim(),
     target_type: input.targetType,
     duration_type: input.durationType,
-    duration_value: input.durationType === 'timed' && input.durationValue != null ? input.durationValue * 60 : input.durationValue,
+    duration_value: input.durationType === 'timed' && input.durationValue != null ? timedCardMinutesToSeconds(input.durationValue) : input.durationValue,
     can_be_stolen: input.canBeStolen,
     enabled: input.enabled,
   }
@@ -139,7 +140,7 @@ export function mapCardDefinitionRow(row: SupabaseCardDefinitionAdminRow): CardD
     target: targetType === 'round' || targetType === 'global' ? 'global' : targetType === 'active_card' ? 'opponent' : targetType,
     activationTiming: 'anytime',
     durationType: row.duration_type === 'timed' || row.duration_type === 'games' || row.duration_type === 'until_condition' ? row.duration_type : 'instant',
-    durationValue: row.duration_type === 'timed' ? Math.max(1, (row.duration_value ?? 60) / 60) : row.duration_value ?? 1,
+    durationValue: row.duration_value ?? (row.duration_type === 'timed' ? 60 : 1),
     effectType: row.effect_type,
     targetType,
     canBeStolen: row.can_be_stolen,

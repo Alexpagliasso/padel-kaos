@@ -65,7 +65,8 @@ describe('admin screens', () => {
       />,
     )
 
-    expect(html).toContain('TURNO CORRENTE')
+    expect(html).toContain('PREPARAZIONE TORNEO')
+    expect(html).toContain('PROSSIMA AZIONE')
     expect(html).toContain('ROUND 1')
   })
 

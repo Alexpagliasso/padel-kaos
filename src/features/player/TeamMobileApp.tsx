@@ -7,6 +7,7 @@ import { validateMatchLineup } from '../../domain/rules/rulesEngine'
 import { useLineupRepository } from '../../repositories/lineupRepository'
 import { getPlayerDisplayName } from '../../shared/lib/playerNames'
 import type { CardDefinition, Match, Team, TeamCard, Tournament } from '../../shared/types/domain'
+import { formatTimedCardDuration } from '../../domain/cards/cardDuration'
 import type { PlayerRouteState } from '../../routes/playerRouteState'
 import type { DemoEvent } from '../../demo/demoTypes'
 import { EventPresentationOverlay } from '../../shared/components/EventPresentationOverlay'
@@ -20,6 +21,7 @@ import { SetTimer } from '../../shared/components/SetTimer'
 import { useSharedClock } from '../../shared/hooks/useSharedClock'
 import { groupStandings } from '../../domain/standings/groupStandings'
 import { LiveEventPresenter } from '../../shared/components/LiveEventPresenter'
+import { isJolly, jollyTargets } from '../../domain/effects/gameEffectPresentation'
 
 type TeamTab = 'match' | 'lineup' | 'standings' | 'results'
 
@@ -28,12 +30,13 @@ export function TeamMobileApp({ tournament, events, routeState, onSelectDemoTeam
   events: DemoEvent[]
   routeState: Extract<PlayerRouteState, { type: 'ready' }>
   onSelectDemoTeam: (teamId: string) => void
-  onPlayDemoCard: (teamCardId: string) => string | Promise<string>
+  onPlayDemoCard: (teamCardId: string, resolvedCardDefinitionId?: string) => string | Promise<string>
   headerAction?: ReactNode
 }) {
   const [tab, setTab] = useState<TeamTab>('match')
   const [selectedMatchId, setSelectedMatchId] = useState(routeState.match.id)
   const [deckOpen, setDeckOpen] = useState(false)
+  const [lineupDrafts, setLineupDrafts] = useState<Record<string, string[]>>({})
   const previousCurrentMatchId = useRef(routeState.match.id)
   const { playerTeam, matches, cards, greetingName, showDemoTeamSelector } = routeState
   useEffect(() => {
@@ -47,6 +50,8 @@ export function TeamMobileApp({ tournament, events, routeState, onSelectDemoTeam
   const diceEffect = getDiceEffect(tournament, match)
   const requiredLineupSet=getRequiredLineupSet(match)
   const lineupActionRequired=requiredLineupSet!==null&&!match.lineups.some(lineup=>lineup.teamId===playerTeam.id&&lineup.setNumber===requiredLineupSet)
+  const waitingForSetStart=requiredLineupSet!==null&&!lineupActionRequired
+  const lineupDraftKey=requiredLineupSet?`${match.id}:${requiredLineupSet}`:''
 
   return <MobileRoleShell title={playerTeam.name} status={tournament.status ?? match.status} action={headerAction}><CardPlayNotification tournament={tournament} audience="team" matchIds={[match.id]} excludeTeamId={playerTeam.id}/><LiveEventPresenter tournament={tournament} audience="team" matchIds={[match.id]} teamId={playerTeam.id}/>
     <GlobalDiceReveal tournament={tournament} audience="team" /><GlobalSpecialEventReveal tournament={tournament} audience="team" />
@@ -55,32 +60,56 @@ export function TeamMobileApp({ tournament, events, routeState, onSelectDemoTeam
         <div className="min-w-0"><p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--event-primary)]">{showDemoTeamSelector ? 'Demo giocatore' : 'Area giocatore'}</p><p className="truncate text-sm text-white/60">Ciao {greetingName}</p></div>
         {showDemoTeamSelector ? <select aria-label="Visualizza come squadra" className="max-w-40 rounded-xl border border-white/10 bg-black px-3 py-2 text-sm text-white" value={playerTeam.id} onChange={event => onSelectDemoTeam(event.target.value)}>{tournament.teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select> : null}
       </div>
-      <TeamLiveStatus tournament={tournament} match={match} teamId={playerTeam.id} />
+      {tab==='match'&&requiredLineupSet===null&&<div className="mb-4 grid grid-cols-2 gap-2"><button type="button" disabled={!matchCards.length} onClick={()=>setDeckOpen(true)} className="min-h-14 rounded-xl bg-[var(--event-primary)] px-3 font-black text-black disabled:bg-white/10 disabled:text-white/35">LE MIE CARTE · {matchCards.length}</button><button type="button" onClick={()=>setTab('lineup')} className="min-h-14 rounded-xl border border-white/15 bg-white/5 px-3 font-black">FORMAZIONE ✓</button></div>}
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={tab} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: .16 }}>
-          {tab === 'match' && <TeamMatchTab tournament={tournament} events={events} team={playerTeam} match={match} matches={matches} onSelectMatch={setSelectedMatchId} />}
+          {tab === 'match' && (lineupActionRequired&&requiredLineupSet?<TeamLineupFirstHome tournament={tournament} team={playerTeam} match={match} setNumber={requiredLineupSet} selected={lineupDrafts[lineupDraftKey]??[]} onSelectedChange={selected=>setLineupDrafts(current=>({...current,[lineupDraftKey]:selected}))}/>:waitingForSetStart&&requiredLineupSet?<TeamWaitingHome tournament={tournament} team={playerTeam} match={match} setNumber={requiredLineupSet}/>:<TeamMatchTab tournament={tournament} events={events} team={playerTeam} match={match} matches={matches} onSelectMatch={setSelectedMatchId} />)}
           {tab === 'lineup' && <TeamLineupTab tournament={tournament} team={playerTeam} match={match} />}
           {tab === 'standings' && <TeamStandingsTab tournament={tournament} team={playerTeam} />}
           {tab === 'results' && <TeamResultsTab tournament={tournament} team={playerTeam} matches={matches} selectedMatchId={match.id} onSelectMatch={(id) => { setSelectedMatchId(id); setTab('match') }} />}
         </motion.div>
       </AnimatePresence>
     </main>
-    <TeamBottomNavigation active={tab} cardsCount={tournament.cardsEnabled===false?0:matchCards.length} lineupActionRequired={lineupActionRequired} onChange={setTab} onOpenCards={() => setDeckOpen(true)} />
-    <TeamCardDeck open={deckOpen&&tournament.cardsEnabled!==false} onClose={() => setDeckOpen(false)} cards={matchCards} definitions={tournament.cards} demo={showDemoTeamSelector} onPlayDemoCard={onPlayDemoCard} blockedReason={diceEffect.active ? 'Carte bloccate durante l’effetto del dado' : undefined} />
+    <TeamBottomNavigation active={tab} lineupActionRequired={lineupActionRequired} onChange={setTab} />
+    <TeamCardDeck open={deckOpen&&tournament.cardsEnabled!==false} onClose={() => setDeckOpen(false)} cards={matchCards} definitions={tournament.cards} jollyCopyTargetIds={tournament.jollyCopyTargetIds} demo={showDemoTeamSelector} onPlayDemoCard={onPlayDemoCard} blockedReason={diceEffect.active ? `Carte bloccate durante l’effetto del dado · ${formatCountdown(diceEffect.remainingSeconds)}` : undefined} />
   </MobileRoleShell>
 }
 
-export function TeamBottomNavigation({ active, cardsCount, lineupActionRequired=false, onChange, onOpenCards }: { active: TeamTab; cardsCount: number; lineupActionRequired?:boolean; onChange: (tab: TeamTab) => void; onOpenCards: () => void }) {
+export function TeamBottomNavigation({ active, lineupActionRequired=false, onChange }: { active: TeamTab; lineupActionRequired?:boolean; onChange: (tab: TeamTab) => void }) {
   const items = [
     { id: 'match' as const, label: 'Partita', icon: Swords },
     { id: 'lineup' as const, label: 'Formazione', icon: Users },
-    { id: 'standings' as const, label: 'Classifica', icon: Table2 },
     { id: 'results' as const, label: 'Risultati', icon: CalendarDays },
+    { id: 'standings' as const, label: 'Classifica', icon: Table2 },
   ]
-  return <nav aria-label="Navigazione squadra" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0b0b0b]/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_32px_rgba(0,0,0,.35)] backdrop-blur-xl"><div className="mx-auto grid max-w-lg grid-cols-5 items-end px-1 py-2"><NavItem item={items[0]} active={active} onChange={onChange} /><NavItem item={items[1]} active={active} onChange={onChange} actionRequired={lineupActionRequired}/><NavItem item={items[2]} active={active} onChange={onChange} /><NavItem item={items[3]} active={active} onChange={onChange} /><button type="button" aria-label={cardsCount ? `Apri carte, ${cardsCount} disponibili` : 'Apri carte, nessuna disponibile'} disabled={!cardsCount} onClick={onOpenCards} className="relative grid min-h-14 place-items-center gap-1 rounded-xl text-[10px] font-black uppercase tracking-wide text-[var(--event-primary)] disabled:text-white/30"><span className="relative -mt-5 grid size-12 place-items-center rounded-xl border border-[var(--event-primary)]/50 bg-[var(--event-primary)] text-black shadow-[0_0_24px_var(--event-soft)]"><CreditCard className="size-5" />{cardsCount > 0 && <span className="absolute -right-2 -top-2 grid size-5 place-items-center rounded-full bg-white text-[10px] font-black text-black">{cardsCount}</span>}</span><span>Carte</span></button></div></nav>
+  return <nav aria-label="Navigazione squadra" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0b0b0b]/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_32px_rgba(0,0,0,.35)] backdrop-blur-xl"><div className="mx-auto grid max-w-lg grid-cols-4 items-end px-1 py-2">{items.map(item=><NavItem key={item.id} item={item} active={active} onChange={onChange} actionRequired={item.id==='lineup'&&lineupActionRequired}/>)}</div></nav>
 }
 
 function NavItem({ item, active, onChange, actionRequired=false }: { item: { id: TeamTab; label: string; icon: typeof Swords }; active: TeamTab; onChange: (tab: TeamTab) => void;actionRequired?:boolean }) { const selected = active === item.id; return <button type="button" aria-current={selected ? 'page' : undefined} aria-label={actionRequired?`${item.label}: azione richiesta`:item.label} onClick={() => onChange(item.id)} className={`relative grid min-h-14 place-items-center gap-1 rounded-xl text-[10px] font-black uppercase tracking-wide transition ${selected||actionRequired ? 'bg-[var(--event-primary)]/15 text-[var(--event-primary)]' : 'text-white/55'}`}><item.icon className="size-5" />{item.label}{actionRequired&&<span className="absolute right-2 top-1 size-2 rounded-full bg-amber-300"/>}</button> }
+
+function TeamLineupFirstHome({tournament,team,match,setNumber,selected,onSelectedChange}:{tournament:Tournament;team:Team;match:Match;setNumber:1|2;selected:string[];onSelectedChange:(selected:string[])=>void}) {
+  const repository=useLineupRepository()
+  const [feedback,setFeedback]=useState('')
+  const opponent=tournament.teams.find(item=>item.id===(match.teamAId===team.id?match.teamBId:match.teamAId))
+  const used=match.lineups.filter(item=>item.teamId===team.id&&item.setNumber!==setNumber&&item.setNumber<3)
+  const validation=validateMatchLineup({candidate:{activePlayerIds:selected},usedLineups:used,roster:team.players})
+  const toggle=(id:string)=>onSelectedChange(selected.includes(id)?selected.filter(value=>value!==id):selected.length<2?[...selected,id]:[selected[1],id])
+  const save=async()=>{if(!validation.valid||selected.length!==2)return;setFeedback('');try{await repository.confirm({tournamentId:tournament.id,matchId:match.id,teamId:team.id,setNumber,playerIds:[selected[0],selected[1]]});setFeedback('Formazione confermata. Attendi l’avvio del set.')}catch(cause){setFeedback(cause instanceof Error?cause.message:'Impossibile confermare la formazione.')}}
+  return <section aria-label={`Formazione richiesta Set ${setNumber}`} className="grid gap-4">
+    <div className="rounded-2xl border border-amber-300/40 bg-amber-300/10 p-4"><p className="text-xs font-black uppercase tracking-[.16em] text-amber-200">AZIONE RICHIESTA · SET {setNumber}</p><h1 className="mt-1 text-2xl font-black">Scegli la formazione</h1><p className="mt-1 text-sm text-white/65">Contro {opponent?.name??'Avversario'}</p></div>
+    <div><p className="text-xs font-black uppercase tracking-[.14em] text-white/45">Partecipanti avversari</p><div className="mt-2 grid grid-cols-2 gap-2">{opponent?.players.map(player=><div key={player.id} className="rounded-lg bg-white/[.05] px-3 py-2 text-sm font-bold">{getPlayerDisplayName(player)}</div>)}</div></div>
+    <div><p className="text-xs font-black uppercase tracking-[.14em] text-[var(--event-primary)]">I tuoi giocatori · {selected.length}/2</p><div className="mt-2 grid gap-2">{team.players.map(player=>{const active=selected.includes(player.id);return <button key={player.id} type="button" aria-pressed={active} onClick={()=>toggle(player.id)} className={`flex min-h-14 items-center justify-between rounded-xl border px-4 text-left ${active?'border-[var(--event-primary)] bg-[var(--event-primary)]/15':'border-white/10 bg-white/[.04]'}`}><span className="font-black">{getPlayerDisplayName(player)}</span>{active&&<Check className="size-5 text-[var(--event-primary)]"/>}</button>})}</div></div>
+    {!validation.valid&&selected.length===2&&<p className="text-sm font-bold text-red-200">{validation.reason}</p>}
+    {(feedback||repository.error)&&<p className="text-sm font-bold">{feedback||repository.error}</p>}
+    <button type="button" disabled={repository.isSaving||!validation.valid||selected.length!==2} onClick={()=>void save()} className="min-h-14 w-full rounded-xl bg-[var(--event-primary)] px-4 text-base font-black text-black disabled:opacity-40">CONFERMA FORMAZIONE</button>
+  </section>
+}
+
+function TeamWaitingHome({tournament,team,match,setNumber}:{tournament:Tournament;team:Team;match:Match;setNumber:1|2}) {
+  const opponent=tournament.teams.find(item=>item.id===(match.teamAId===team.id?match.teamBId:match.teamAId))
+  const court=tournament.courts.find(item=>item.id===match.courtId)
+  return <section aria-label="Attesa avvio set" className="rounded-2xl border border-emerald-300/30 bg-emerald-400/10 p-5 text-center"><Check className="mx-auto size-10 text-emerald-300"/><p className="mt-3 text-xs font-black uppercase tracking-[.16em] text-emerald-200">FORMAZIONE CONFERMATA</p><h1 className="mt-2 text-2xl font-black">In attesa del Set {setNumber}</h1><p className="mt-2 text-sm text-white/65">vs {opponent?.name??'Avversario'} · {court?.name??'Campo da assegnare'}</p></section>
+}
 
 function TeamMatchTab({ tournament, events, team, match, matches, onSelectMatch }: { tournament: Tournament; events: DemoEvent[]; team: Team; match: Match; matches: Match[]; onSelectMatch: (id: string) => void }) {
   const diceNow = useSharedClock()
@@ -96,8 +125,10 @@ function TeamMatchTab({ tournament, events, team, match, matches, onSelectMatch 
     <label className="grid gap-1.5"><span className="text-xs font-black uppercase tracking-[.16em] text-white/45">Partita</span><select aria-label="Seleziona partita" value={match.id} onChange={event => onSelectMatch(event.target.value)} className="min-h-12 w-full rounded-lg border border-white/15 bg-[#171717] px-3 text-sm font-bold text-white">{matches.map(item => <option key={item.id} value={item.id}>{matchOptionLabel(tournament, team, item)}</option>)}</select></label>
     <section className={`relative overflow-hidden rounded-[28px] border p-5 shadow-2xl ${live ? 'border-emerald-400/45 bg-gradient-to-br from-emerald-500/15 via-[#171717] to-black' : 'border-[var(--event-primary)]/30 bg-gradient-to-br from-[var(--event-primary)]/15 via-[#171717] to-black'}`}>
       <div className="absolute -right-12 -top-12 size-36 rounded-full bg-[var(--event-primary)]/10 blur-3xl" />
-      <div className="relative text-center"><div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-white/60"><span>{round?.name ?? 'Turno'}</span><span>·</span><span>{court?.name ?? 'Campo da assegnare'}</span></div>{live && <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-black uppercase text-emerald-300"><span className="size-2 rounded-full bg-emerald-300" />In corso</p>}<div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3"><h1 className="min-w-0 break-words text-xl font-black leading-tight">{team.name}</h1><span className="text-sm font-black text-[var(--event-primary)]">VS</span><h2 className="min-w-0 break-words text-xl font-black leading-tight">{opponent?.name ?? 'Avversario'}</h2></div><p className="mt-5 text-2xl font-black">{matchSetLabel(match)}</p><p className="mt-1 text-sm text-white/60">{matchStatusLabel(match.status)}</p></div>
+      <div className="relative text-center"><div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-white/60"><span>{round?.name ?? 'Turno'}</span><span>·</span><span>{court?.name ?? 'Campo da assegnare'}</span></div>{live && <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-black uppercase text-emerald-300"><span className="size-2 rounded-full bg-emerald-300" />In corso</p>}<div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3"><h1 className="min-w-0 break-words text-xl font-black leading-tight">{team.name}</h1><span className="text-sm font-black text-[var(--event-primary)]">VS</span><h2 className="min-w-0 break-words text-xl font-black leading-tight">{opponent?.name ?? 'Avversario'}</h2></div>{live&&<p aria-label="Punteggio game" className="mt-4 text-4xl font-black tabular-nums">{match.score.games.A}–{match.score.games.B}</p>}<p className="mt-5 text-2xl font-black">{matchSetLabel(match)}</p><p className="mt-1 text-sm text-white/60">{matchStatusLabel(match.status)}</p></div>
+      <div className="relative mt-4"><SetTimer match={match} size="compact" /></div>
     </section>
+    <TeamLiveStatus tournament={tournament} match={match} teamId={team.id} />
     <TeamCardLiveNotice tournament={tournament} match={match} team={team} />
     <TeamCardAssignmentState tournament={tournament} match={match} team={team} />
     <section className="rounded-xl border border-white/10 bg-white/[.04] p-3"><p className="text-xs font-black uppercase tracking-[.16em] text-white/45">Stato partita</p><p className="mt-1 text-base font-black text-[var(--event-primary)]">{matchStatusLabel(match.status)}</p></section>
@@ -118,7 +149,7 @@ function TeamLiveStatus({tournament,match,teamId}:{tournament:Tournament;match:M
   const activeEvent=tournament.globalEvents.find(event=>event.status==='active')
   const visible=Boolean(match.status==='live_set_1'||match.status==='live_set_2'||dice.active||activeCards.length||activeEvent)
   if(!visible)return null
-  return <aside aria-label="Stato live" className="sticky top-0 z-30 mb-4 grid gap-1 rounded-xl border border-white/20 bg-[#111]/95 p-2 shadow-xl backdrop-blur"><SetTimer match={match} size="compact"/>{dice.active&&<ActiveDiceIndicator tournament={tournament} match={match}/>}<div className="flex flex-wrap gap-1">{match.genderHandicapAvailable&&['live_set_1','live_set_2'].includes(match.status)&&<span className="rounded bg-amber-400/15 px-2 py-1 text-xs font-bold text-amber-100">INIZIO GAME · {match.score.points.A}–{match.score.points.B}</span>}{activeEvent&&<span className="rounded bg-fuchsia-400/15 px-2 py-1 text-xs font-bold text-fuchsia-100">EVENTO · {activeEvent.title}</span>}{activeCards.map(card=>{const definition=tournament.cards.find(item=>item.id===card.cardId);return <span key={card.id} className="rounded bg-emerald-400/15 px-2 py-1 text-xs font-bold text-emerald-100">{card.teamId===teamId?'TUA CARTA':'CARTA AVVERSARIA'} · {definition?.name??'Carta'}</span>})}</div></aside>
+  return <aside aria-label="Stato live" className="grid gap-1 rounded-xl border border-white/15 bg-white/[.04] p-2">{dice.active&&<ActiveDiceIndicator tournament={tournament} match={match}/>}<div className="flex flex-wrap gap-1">{match.genderHandicapAvailable&&['live_set_1','live_set_2'].includes(match.status)&&<span className="rounded bg-amber-400/15 px-2 py-1 text-xs font-bold text-amber-100">INIZIO GAME · {match.score.points.A}–{match.score.points.B}</span>}{activeEvent&&<span className="rounded bg-fuchsia-400/15 px-2 py-1 text-xs font-bold text-fuchsia-100">EVENTO · {activeEvent.title}</span>}{activeCards.map(card=>{const definition=tournament.cards.find(item=>item.id===(card.resolvedCardDefinitionId??card.cardId));return <span key={card.id} className="rounded bg-emerald-400/15 px-2 py-1 text-xs font-bold text-emerald-100">{card.teamId===teamId?'TUA CARTA':'CARTA AVVERSARIA'} · {definition?.name??'Carta'}{card.expiresAt?` · ${remainingTime(card.expiresAt,now)}`:''}</span>})}</div></aside>
 }
 
 function TeamCardAssignmentState({ tournament, match, team }: { tournament: Tournament; match: Match; team: Team }) {
@@ -181,16 +212,19 @@ function TeamOwnSetLineup({ tournament, team, match, setNumber, editable }: { to
 function ReadOnlyLineup({ title, lineup, team, unavailable }: { title: string; lineup?: Match['lineups'][number]; team?: Team; unavailable: string }) { return <div><p className="flex min-h-11 items-center text-xs font-black uppercase tracking-[.12em] text-white/45">{title}</p>{lineup && team ? <LineupPlayers lineup={lineup} team={team} /> : <p className="text-sm text-white/55">{unavailable}</p>}</div> }
 function LineupPlayers({ lineup, team }: { lineup: Match['lineups'][number]; team: Team }) { return <div className="grid gap-1.5">{lineup.activePlayerIds.map(id => { const player = team.players.find(item => item.id === id); const Gender = player?.gender === 'woman' ? Venus : player?.gender === 'man' ? Mars : null; return <div key={id} className="flex min-h-11 items-center justify-between rounded-lg bg-black/25 px-3"><span className="text-sm font-bold">{player ? getPlayerDisplayName(player) : 'Giocatore'}</span>{player && <span className="flex items-center gap-1 text-xs text-white/50">{Gender && <Gender className="size-3.5" />}{genderLabel(player.gender)}</span>}</div> })}</div> }
 
-export function TeamCardDeck({ open, onClose, cards, definitions, demo: _demo, onPlayDemoCard, blockedReason }: { open: boolean; onClose: () => void; cards: TeamCard[]; definitions: CardDefinition[]; demo: boolean; onPlayDemoCard: (id: string) => string | Promise<string>; blockedReason?: string }) {
+export function TeamCardDeck({ open, onClose, cards, definitions, jollyCopyTargetIds, demo: _demo, onPlayDemoCard, blockedReason }: { open: boolean; onClose: () => void; cards: TeamCard[]; definitions: CardDefinition[]; jollyCopyTargetIds?:string[]; demo: boolean; onPlayDemoCard: (id: string, resolvedCardDefinitionId?: string) => string | Promise<string>; blockedReason?: string }) {
   void _demo
   const [index, setIndex] = useState(0)
   const [detail, setDetail] = useState<{ teamCard: TeamCard; definition: CardDefinition } | null>(null)
   const reducedMotion = useReducedMotion()
   const [pendingCardId, setPendingCardId] = useState('')
   const [cardFeedback, setCardFeedback] = useState('')
+  const [jollyTargetId,setJollyTargetId]=useState('')
+  const [showHow,setShowHow]=useState(false)
   const now = useSharedClock()
   useEffect(() => {const timer=window.setTimeout(()=>{ if (open) { setIndex(0); setDetail(null) } },0);return()=>window.clearTimeout(timer)}, [open])
   const visible = cards.map(teamCard => ({ teamCard, definition: definitions.find(card => card.id === teamCard.cardId) })).filter((item): item is { teamCard: TeamCard; definition: CardDefinition } => Boolean(item.definition))
+  const allowedJollyTargets=jollyTargets(definitions,jollyCopyTargetIds?.length?jollyCopyTargetIds:undefined)
   const move = (direction: number) => setIndex(current => visible.length ? (current + direction + visible.length) % visible.length : 0)
   const positionOf = (cardIndex: number) => {
     let position = cardIndex - index
@@ -199,17 +233,20 @@ export function TeamCardDeck({ open, onClose, cards, definitions, demo: _demo, o
     return position
   }
   return <Dialog fullScreen open={open} onClose={onClose} sx={{ zIndex: 1700 }} slotProps={{ paper: { sx: { bgcolor: '#090909', backgroundImage: 'radial-gradient(circle at 50% 10%, var(--event-soft), transparent 48%)' } } }}>
-    <div data-card-experience="fullscreen" className="flex h-[100svh] min-h-0 w-full flex-col overflow-hidden pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
+    <div data-card-experience="fullscreen" className="flex h-[100svh] min-h-0 w-full flex-col overflow-hidden pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] supports-[height:100dvh]:h-[100dvh]">
       <header className="flex min-h-14 shrink-0 items-center justify-between px-3">
-        {detail ? <button type="button" aria-label="Torna alla mano" onClick={() => setDetail(null)} className="flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-black"><ArrowLeft className="size-5" />Carte</button> : <div><h2 className="text-lg font-black">Le tue carte</h2><p className="text-xs font-bold text-[var(--event-primary)]">{visible.length} {visible.length === 1 ? 'disponibile' : 'disponibili'}</p></div>}
+        {detail ? <button type="button" aria-label="Torna alla mano" onClick={() => {setDetail(null);setShowHow(false)}} className="flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-black"><ArrowLeft className="size-5" />Carte</button> : <div><h2 className="text-lg font-black">Le tue carte</h2><p className="text-xs font-bold text-[var(--event-primary)]">{visible.length} {visible.length === 1 ? 'disponibile' : 'disponibili'}</p></div>}
         <IconButton aria-label="Chiudi carte" onClick={onClose} sx={{ minWidth: 44, minHeight: 44 }}><X /></IconButton>
       </header>
-      <AnimatePresence mode="wait" initial={false}>
-        {detail ? <motion.main key="detail" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} transition={{ duration: reducedMotion ? 0 : .16 }} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5">
+      <AnimatePresence mode="sync" initial={false}>
+        {detail ? <motion.main key="detail" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} transition={{ duration: reducedMotion ? 0 : .16 }} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div data-card-detail-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4">
           <div className="mx-auto max-w-xl">
             {detail.definition.imageUrl ? <div className="h-[clamp(220px,42svh,360px)] bg-black/30 p-2"><img src={detail.definition.imageUrl} alt="" className="h-full w-full object-contain" /></div> : <div className="grid h-[clamp(220px,42svh,360px)] place-items-center bg-gradient-to-br from-[var(--event-primary)]/35 to-black"><Swords className="size-20 text-[var(--event-primary)]" /></div>}
-            <div className="py-4"><h1 className="text-3xl font-black leading-tight">{detail.definition.name}</h1><div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-[var(--event-primary)]/15 px-3 py-1 text-xs font-black text-[var(--event-primary)]">{effectiveCardStateLabel(detail.teamCard, now)}</span><span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold">Durata · {durationLabel(detail.definition.durationType, detail.definition.durationValue)}</span></div><p className="mt-5 text-xs font-black uppercase tracking-[.16em] text-white/45">Descrizione</p><p className="mt-2 whitespace-pre-line text-base leading-relaxed text-white/75">{detail.definition.longDescription || detail.definition.description}</p></div>
+            <div className="py-4"><h1 className="text-3xl font-black leading-tight">{detail.definition.name}</h1><div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-[var(--event-primary)]/15 px-3 py-1 text-xs font-black text-[var(--event-primary)]">{effectiveCardStateLabel(detail.teamCard, now)}</span><span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold">Durata · {durationLabel(detail.definition.durationType, detail.definition.durationValue)}</span></div><p className="mt-5 text-xs font-black uppercase tracking-[.16em] text-white/45">Descrizione</p><p data-card-description className="mt-2 whitespace-pre-line text-base leading-relaxed text-white/75">{showHow?(detail.definition.longDescription||detail.definition.description):detail.definition.description}</p><button type="button" onClick={()=>setShowHow(value=>!value)} className="mt-4 min-h-12 w-full rounded-lg border border-white/20 px-4 font-black">{showHow?'CHIUDI DETTAGLI':'COME FUNZIONA'}</button>{isJolly(detail.definition)&&<JollyTargetPicker targets={allowedJollyTargets} selectedId={jollyTargetId} onSelect={setJollyTargetId}/>}</div>
           </div>
+          </div>
+          <footer data-card-detail-actions className="shrink-0 border-t border-white/10 bg-[#090909]/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3"><div className="mx-auto max-w-xl"><button type="button" aria-label={isJolly(detail.definition)?'Gioca Jolly':'Gioca carta'} disabled={Boolean(blockedReason)||pendingCardId===detail.teamCard.id||detail.teamCard.state!=='available'||(isJolly(detail.definition)&&!jollyTargetId)} onClick={async()=>{setPendingCardId(detail.teamCard.id);setCardFeedback('');try{setCardFeedback(await(isJolly(detail.definition)?onPlayDemoCard(detail.teamCard.id,jollyTargetId):onPlayDemoCard(detail.teamCard.id)))}catch(cause){setCardFeedback(cause instanceof Error?cause.message:'Richiesta non riuscita.')}finally{setPendingCardId('')}}} className="min-h-14 w-full rounded-lg bg-[var(--event-primary)] px-4 font-black text-black disabled:opacity-40">{isJolly(detail.definition)?'GIOCA JOLLY':`GIOCA ${detail.definition.name.toUpperCase()}`}</button>{cardFeedback&&<p className="mt-2 text-sm font-bold">{cardFeedback}</p>}</div></footer>
         </motion.main> : <motion.main key="hand" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? 0 : .12 }} className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
           <div className="relative min-h-0 flex-1 overflow-hidden">
             {visible.length ? <div className="relative mx-auto h-full w-full max-w-xl overflow-hidden">{visible.map((item, cardIndex) => {
@@ -224,9 +261,9 @@ export function TeamCardDeck({ open, onClose, cards, definitions, demo: _demo, o
                   aria-label={front ? undefined : `Seleziona carta ${item.definition.name}`}
                   onClick={selectCard}
                   onKeyDown={event => { if (!front && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); selectCard() } }}
-                  className="pointer-events-auto relative flex h-[calc(100%-8px)] w-[calc(100%-24px)] max-w-[560px] flex-col overflow-hidden rounded-[16px] border border-white/15 bg-[#171717] shadow-[0_20px_48px_rgba(0,0,0,.62)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--event-primary)]"
+                  className="pointer-events-auto relative flex h-[calc(100%-8px)] w-[calc(100%-56px)] max-w-[520px] flex-col overflow-hidden rounded-[16px] border border-white/15 bg-[#171717] shadow-[0_20px_48px_rgba(0,0,0,.62)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--event-primary)]"
                   style={{ zIndex: front ? 20 : 10 }}
-                  animate={{ x: position === 0 ? '0%' : `${position * 92}%`, y: Math.abs(position) * 5, scale: front ? 1 : .96, rotate: position * 2.5, opacity: front ? 1 : .66 }}
+                  animate={{ x: position === 0 ? '0%' : `${position * 84}%`, y: Math.abs(position) * 5, scale: front ? 1 : .96, rotate: position * 2.5, opacity: front ? 1 : .66 }}
                   transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 34 }}
                   drag={front && !reducedMotion ? 'x' : false}
                   dragConstraints={{ left: 0, right: 0 }}
@@ -234,23 +271,28 @@ export function TeamCardDeck({ open, onClose, cards, definitions, demo: _demo, o
                   onDragEnd={(_, info) => { if (Math.abs(info.offset.x) > 55 || Math.abs(info.velocity.x) > 450) move(info.offset.x < 0 ? 1 : -1) }}
                 >
                   {item.definition.imageUrl ? <div className="h-[48%] shrink-0 bg-black/35 p-1"><img src={item.definition.imageUrl} alt="" className="h-full w-full object-contain" /></div> : <div className="grid h-[48%] shrink-0 place-items-center bg-gradient-to-br from-[var(--event-primary)]/35 to-black"><Swords className="size-20 text-[var(--event-primary)]" /></div>}
-                  <div className={`flex min-h-0 flex-1 flex-col p-[clamp(.75rem,2svh,1.15rem)] ${front ? '' : 'opacity-0'}`}>
+                  <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-[clamp(.75rem,2svh,1.15rem)] ${front ? '' : 'opacity-0'}`}>
                     <p className="text-[11px] font-black uppercase tracking-[.14em] text-[var(--event-primary)]">{effectiveCardStateLabel(item.teamCard, now)}</p>
                     <div className="mt-[clamp(.4rem,1.2svh,.75rem)] flex min-h-11 items-center justify-between gap-2"><h3 className="min-w-0 text-[clamp(1.3rem,5.5vw,1.65rem)] font-black leading-tight">{item.definition.name}</h3>{front && <IconButton aria-label={`Dettagli carta ${item.definition.name}`} onClick={() => setDetail(item)} sx={{ minWidth: 44, minHeight: 44 }}><Info /></IconButton>}</div>
                     <p className="mt-[clamp(.4rem,1.1svh,.7rem)] text-sm leading-relaxed text-white/70">{item.definition.description}</p>
                     <span className="mt-[clamp(.55rem,1.4svh,.9rem)] w-fit rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold">Durata · {durationLabel(item.definition.durationType, item.definition.durationValue)}</span>
                     {front && item.teamCard.state === 'active' && item.teamCard.expiresAt && <p className="mt-3 text-2xl font-black text-[var(--event-primary)]">{remainingTime(item.teamCard.expiresAt, now)}</p>}
-                    {front && <div className="mt-auto flex flex-col items-end gap-2 pt-2">{blockedReason && <p className="text-right text-xs font-bold text-amber-300">{blockedReason}</p>}{cardFeedback && <p className="text-right text-xs font-bold text-white/65">{cardFeedback}</p>}<button type="button" disabled={Boolean(blockedReason) || pendingCardId === item.teamCard.id || item.teamCard.state !== 'available'} onClick={async () => { setPendingCardId(item.teamCard.id); setCardFeedback(''); try { setCardFeedback(await onPlayDemoCard(item.teamCard.id)) } catch (cause) { setCardFeedback(cause instanceof Error ? cause.message : 'Richiesta non riuscita.') } finally { setPendingCardId('') } }} className="min-h-12 w-fit rounded-lg bg-[var(--event-primary)] px-6 font-black uppercase text-black disabled:bg-white/10 disabled:text-white/45">Utilizza</button></div>}
+                    {front && <div className="mt-auto flex w-full flex-col gap-2 pt-2">{isJolly(item.definition)&&<JollyTargetPicker targets={allowedJollyTargets} selectedId={jollyTargetId} onSelect={setJollyTargetId}/>} {blockedReason && <p className="text-xs font-bold text-amber-300">{blockedReason}</p>}{cardFeedback && <p className="text-xs font-bold text-white/65">{cardFeedback}</p>}<button type="button" aria-label={isJolly(item.definition)?'Gioca Jolly':'Gioca carta'} disabled={Boolean(blockedReason) || pendingCardId === item.teamCard.id || item.teamCard.state !== 'available'||(isJolly(item.definition)&&!jollyTargetId)} onClick={async () => { setPendingCardId(item.teamCard.id); setCardFeedback(''); try { setCardFeedback(await (isJolly(item.definition)?onPlayDemoCard(item.teamCard.id,jollyTargetId):onPlayDemoCard(item.teamCard.id))) } catch (cause) { setCardFeedback(cause instanceof Error ? cause.message : 'Richiesta non riuscita.') } finally { setPendingCardId('') } }} className="min-h-14 w-full rounded-lg bg-[var(--event-primary)] px-4 font-black uppercase text-black disabled:bg-white/10 disabled:text-white/45">{isJolly(item.definition)?'GIOCA JOLLY':`GIOCA ${item.definition.name.toUpperCase()}`}</button></div>}
                   </div>
                 </motion.article>
               </div>
             })}</div> : <div className="grid h-full place-items-center px-6 text-center"><div><CreditCard className="mx-auto size-12 text-white/25" /><h3 className="mt-4 text-xl font-black">Nessuna carta disponibile</h3><p className="mt-2 text-sm text-white/55">Non ci sono carte assegnate a questa partita.</p></div></div>}
           </div>
-          {visible.length > 1 && <footer className="shrink-0 px-4 py-1"><div className="mx-auto flex max-w-xs items-center justify-between gap-3"><button aria-label="Carta precedente" onClick={() => move(-1)} className="grid size-11 place-items-center rounded-full bg-white/10"><ChevronLeft /></button><p aria-label={`Carta ${index + 1} di ${visible.length}`} className="text-sm font-black text-white/65">{index + 1} / {visible.length}</p><button aria-label="Carta successiva" onClick={() => move(1)} className="grid size-11 place-items-center rounded-full bg-white/10"><ChevronRight /></button></div></footer>}
+          {visible.length > 1 && <footer className="shrink-0 px-4 py-2"><p className="mb-1 text-center text-[11px] font-bold text-white/45">Scorri per cambiare carta</p><div className="mx-auto flex max-w-xs items-center justify-between gap-3"><button aria-label="Carta precedente" onClick={() => move(-1)} className="grid size-11 place-items-center rounded-full bg-white/10"><ChevronLeft /></button><div className="text-center"><p aria-label={`Carta ${index + 1} di ${visible.length}`} className="text-sm font-black text-white/75">{index + 1} DI {visible.length}</p><div className="mt-1 flex justify-center gap-1">{visible.map((item,dotIndex)=><span key={item.teamCard.id} className={`h-1.5 rounded-full ${dotIndex===index?'w-4 bg-[var(--event-primary)]':'w-1.5 bg-white/25'}`}/>)}</div></div><button aria-label="Carta successiva" onClick={() => move(1)} className="grid size-11 place-items-center rounded-full bg-white/10"><ChevronRight /></button></div></footer>}
         </motion.main>}
       </AnimatePresence>
     </div>
   </Dialog>
+}
+
+function JollyTargetPicker({targets,selectedId,onSelect}:{targets:CardDefinition[];selectedId:string;onSelect:(id:string)=>void}) {
+  const selected=targets.find(target=>target.id===selectedId)
+  return <div className="mt-4 w-full rounded-xl border border-[var(--event-primary)]/30 bg-[var(--event-primary)]/10 p-3"><p className="text-xs font-black uppercase text-[var(--event-primary)]">Scegli un solo potere</p><div className="mt-2 grid gap-2">{targets.map(target=><button type="button" aria-label={target.name} aria-pressed={selectedId===target.id} key={target.id} onClick={()=>onSelect(target.id)} className="min-h-12 rounded-lg border border-white/15 p-2 text-left"><strong className="block text-sm">{target.name}</strong><span className="mt-1 block text-xs text-white/60">{target.description}</span></button>)}</div>{selected&&<p className="mt-3 rounded-lg bg-black/30 p-2 text-sm font-black">Conferma: Jolly diventa {selected.name}</p>}</div>
 }
 
 function TeamStandingsTab({ tournament, team }: { tournament: Tournament; team: Team }) {
@@ -296,6 +338,6 @@ function matchOptionLabel(tournament: Tournament, team: Team, match: Match) { co
 export function isSuperTieBreakRequired(match: Match) { return match.score.currentSet >= 3 }
 function cardStateLabel(state: TeamCard['state']) { return ({ available: 'Disponibile', pending: 'In attesa', active: 'Attiva', used: 'Usata', cancelled: 'Annullata', expired: 'Scaduta' } as const)[state] }
 function effectiveCardStateLabel(card: TeamCard, now: number) { return card.state === 'active' && card.expiresAt && new Date(card.expiresAt).getTime() <= now ? 'Scaduta' : cardStateLabel(card.state) }
-function durationLabel(type: CardDefinition['durationType'], value: number) { const labels = { timed: 'tempo', games: 'game', instant: 'istantanea', until_condition: 'fino alla condizione indicata', point: 'punto', game: 'game', set: 'set', match: 'partita' }; return value > 0 && (type === 'timed' || type === 'games') ? `${value} ${labels[type]}` : labels[type] }
+function durationLabel(type: CardDefinition['durationType'], value: number) { const labels = { timed: 'tempo', games: 'game', instant: 'istantanea', until_condition: 'fino alla condizione indicata', point: 'punto', game: 'game', set: 'set', match: 'partita' }; if (type === 'timed' && value > 0) return formatTimedCardDuration(value); return value > 0 && type === 'games' ? `${value} ${labels[type]}` : labels[type] }
 export function remainingTime(expiresAt: string, now = Date.now()) { const seconds=Math.max(0,Math.ceil((new Date(expiresAt).getTime()-now)/1000)); return `${Math.floor(seconds/60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}` }
 function genderLabel(gender: Team['players'][number]['gender']) { return ({ woman: 'Donna', man: 'Uomo', non_binary: 'Non binario', unspecified: 'Non specificato' } as const)[gender] }
